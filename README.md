@@ -12,6 +12,8 @@ Built to grow — add a sub-skill, register it in the router, done.
 [![Elixir](https://img.shields.io/badge/Elixir-1.18+-4B275F?logo=elixir&logoColor=white)](https://elixir-lang.org)
 [![Phoenix](https://img.shields.io/badge/Phoenix-LiveView-FD4F00?logo=phoenixframework&logoColor=white)](https://www.phoenixframework.org)
 
+![elixir-skills](assets/elixir-skills-header.png)
+
 </div>
 
 ---
