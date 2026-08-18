@@ -1,8 +1,72 @@
-# elixir-skills — Elixir/Phoenix Development Framework
+<div align="center">
 
-A living framework of development skills for Elixir/Phoenix work. One router
-skill defines the core development rules and routes to category sub-skills via
-DAGs. Built to grow: add a sub-skill, register it in the router, done.
+# ⚡ elixir-skills
+
+### Elixir/Phoenix Development Framework
+
+One router skill. Thirteen category sub-skills. Every path a DAG, every flow ends in **VERIFY**.
+
+Built to grow — add a sub-skill, register it in the router, done.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Elixir](https://img.shields.io/badge/Elixir-1.18+-4B275F?logo=elixir&logoColor=white)](https://elixir-lang.org)
+[![Phoenix](https://img.shields.io/badge/Phoenix-LiveView-FD4F00?logo=phoenixframework&logoColor=white)](https://www.phoenixframework.org)
+
+</div>
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    R["elixir-skills<br/><b>ROUTER</b><br/>core development rules<br/>+ DAG routing"] --> CATS
+
+    subgraph CATS["Category sub-skills (13)"]
+        SETUP["elixir-setup"]
+        BUILD["elixir-build"]
+        ECTO["elixir-ecto"]
+        LV["elixir-liveview"]
+        AUTH["elixir-auth-security"]
+        PERF["elixir-performance"]
+        FEAT["elixir-features"]
+        DEPLOY["elixir-deploy"]
+        BRIDGES["elixir-bridges"]
+        TEST["elixir-testing"]
+        GIT["elixir-git"]
+        DOCS["elixir-docs"]
+        REVIEW["elixir-review"]
+    end
+
+    SETUP --> SETUPR["references/"]
+    BUILD --> BUILDR["references/"]
+    ECTO --> ECTOR["references/"]
+    LV --> LVR["references/"]
+    AUTH --> AUTHR["references/"]
+    PERF --> PERFR["references/"]
+    FEAT --> FEATR["references/"]
+    DEPLOY --> DEPLOYR["references/"]
+    BRIDGES --> BRIDGESR["references/"]
+    TEST --> TESTR["references/"]
+    GIT --> GITR["references/"]
+    DOCS --> DOCSR["references/"]
+    REVIEW --> REVIEWR["references/"]
+
+    style R fill:#4B275F,color:#fff,stroke:#2d1740,stroke-width:2px
+    style SETUP fill:#d1fae5,stroke:#059669
+    style BUILD fill:#d1fae5,stroke:#059669
+    style ECTO fill:#d1fae5,stroke:#059669
+    style LV fill:#d1fae5,stroke:#059669
+    style AUTH fill:#d1fae5,stroke:#059669
+    style PERF fill:#d1fae5,stroke:#059669
+    style FEAT fill:#d1fae5,stroke:#059669
+    style DEPLOY fill:#d1fae5,stroke:#059669
+    style BRIDGES fill:#d1fae5,stroke:#059669
+    style TEST fill:#d1fae5,stroke:#059669
+    style GIT fill:#d1fae5,stroke:#059669
+    style DOCS fill:#d1fae5,stroke:#059669
+    style REVIEW fill:#fde68a,stroke:#d97706
+```
 
 ## Structure
 
@@ -23,11 +87,24 @@ elixir-skills/
     ├── elixir-testing/       pure Elixir + ExUnit, flaky tests, SSR components
     ├── elixir-git/           commit hygiene, history surgery, signing
     ├── elixir-docs/          READMEs, user docs, UI screenshots
-    └── elixir-review/        architecture specs, plan review
+    └── elixir-review/        architecture specs, plan review, redundancy audit
 ```
 
 Each sub-skill has its own `SKILL.md` (DAG + consolidated patterns) and a
 `references/` directory (absorbed originals + detail).
+
+## Core Development Rules
+
+Every sub-skill inherits these from the router — they apply to **all** Elixir work:
+
+1. **Investigate before concluding.** If you don't know something, say so and research it.
+2. **Codebase first.** Never assume — verify against the actual repo.
+3. **Validate the project.** Confirm which repo you are in before acting.
+4. **Analysis first, changes after.** Read and understand before writing.
+5. **Reusable code, not dogmatic "clean code".** Pragmatism over purity.
+6. **Admit and correct.** Never hide mistakes or fabricate results.
+7. **Ask when ambiguous.** Do not guess.
+8. **Verify before done.** Compile, tests, runtime checks — real tool output only.
 
 ## Installation
 
