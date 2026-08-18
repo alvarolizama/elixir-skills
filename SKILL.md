@@ -7,7 +7,7 @@ license: MIT
 metadata:
   hermes:
     tags: [elixir, phoenix, liveview, ecto, development, framework, router]
-    related_skills: [elixir-setup, elixir-build, elixir-ecto, elixir-liveview, elixir-auth-security, elixir-performance, elixir-features, elixir-deploy, elixir-bridges, elixir-testing, elixir-git, elixir-docs, elixir-review]
+    related_skills: [elixir-setup, elixir-build, elixir-ecto, elixir-liveview, elixir-auth-security, elixir-performance, elixir-features, elixir-deploy, elixir-bridges, elixir-testing, elixir-git, elixir-docs, elixir-review, elixir-review-rules]
 ---
 
 # Elixir Skills — Development Framework
@@ -85,12 +85,14 @@ flowchart TD
   Q -->|"Tests, ExUnit, flaky tests,\\ncomponent testing"| TEST[elixir-testing]
   Q -->|"Git hygiene, history surgery,\\ncommit signing"| GIT[elixir-git]
   Q -->|"READMEs, docs, screenshots"| DOCS[elixir-docs]
-  Q -->|"Code review, architecture specs,\\nplan review, redundancy"| REVIEW[elixir-review]
+  Q -->|"Architecture specs, plan review,\\nredundancy audits"| REVIEW[elixir-review]
+  Q -->|"PR review / diff review\\nagainst idiom rules"| RULES[elixir-review-rules]
 
   style SETUP fill:#d1fae5,stroke:#059669
   style ECTO fill:#d1fae5,stroke:#059669
   style LV fill:#d1fae5,stroke:#059669
   style REVIEW fill:#fde68a,stroke:#d97706
+  style RULES fill:#fde68a,stroke:#d97706
 ```
 
 Run ONLY the section you landed on. If the diagram sends you to another
@@ -113,6 +115,7 @@ sub-skill, **stop here** and hand off — don't absorb that work.
 | `elixir-git` | Commit hygiene for parallel work, history surgery, commit signing |
 | `elixir-docs` | READMEs and user-facing docs, UI screenshot capture |
 | `elixir-review` | Codebase architecture specs, implementation plan review, redundancy audits |
+| `elixir-review-rules` | PR/diff review against distilled idiom rules: style, tests, nil-safety, perf, architecture, i18n |
 
 ## How This Framework Grows
 
