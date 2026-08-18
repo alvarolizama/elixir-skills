@@ -8,7 +8,7 @@ platforms: [linux, macos]
 metadata:
   hermes:
     tags: [elixir, phoenix, liveview, heex, tailwind, daisyui, ecto, debugging, forms, analytics, i18n, performance]
-    related_skills: [systematic-debugging, elixir-build-troubleshooting]
+    related_skills: [systematic-debugging, elixir-build]
 ---
 
 # Elixir LiveView — Category Skill
