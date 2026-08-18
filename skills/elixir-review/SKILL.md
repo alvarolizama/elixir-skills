@@ -24,6 +24,7 @@ before executing them.
 graph TD
     A[Review task] -->|"Analyze codebase → specs\\nfor reimplementation/porting"| B[Architecture Specs]
     A -->|"Audit a plan before\\nexecuting it"| C[Plan Review]
+    A -->|"Hunt duplicated code\\nto refactor"| D[Redundancy Audit]
 
     B --> B1[Scope: manifest + structure]
     B1 --> B2[Read systematically in layers]
@@ -220,6 +221,62 @@ Decide: new todo, or merge into an existing one.
 - Reconstructing bodies with a footer that isn't part of the body.
 - Applying corrections without verifying (re-read each edited page, confirm
   mermaid preserved and content correct).
+
+## Part 3 — Code Redundancy Audit
+
+Find duplicated and reusable code in an Elixir/Phoenix codebase. Works
+read-only; pairs well with a follow-up consolidation plan.
+
+### Why not clone detectors
+
+`jscpd` has NO Elixir parser — running it against `.ex` files silently
+analyzes 0 files and reports "No duplicates found" with `Files analyzed: 0`
+in the stats table. That is a false negative, not a clean codebase. The
+effective method is manual pattern-hunting with grep + diff.
+
+### Workflow
+
+1. **Size the codebase**: count `.ex` files and lines, list directory
+   distribution (`find lib -name "*.ex" | sed 's|/[^/]*$||' | sort | uniq -c
+   | sort -rn`). Directories with many same-sized sibling files (LiveViews
+   per type, controllers per resource, schemas per table) are prime
+   duplication candidates.
+2. **Spot structurally similar siblings**: files of near-identical line
+   count in the same directory. Diff two of them
+   (`diff <(sed -n '110,230p' a.ex) <(sed -n '110,230p' b.ex)`) — few
+   differing lines = clone.
+3. **Grep for copy-paste fingerprints** — private helpers and idiomatic
+   blocks that tend to travel together: `defp format_errors`,
+   `traverse_errors`, `defp titleize`, `get_or_create`, `get_or_insert`,
+   `def run_scheduled`, `on_conflict`, try/rescue wrappers, `if context do
+   ... else 404` guards.
+4. **Check for a partially-adopted shared module**: often the codebase
+   ALREADY started consolidating (a shared helper, a `__using__` macro) and
+   only some callers adopted it. `grep -c` per caller reveals adopters vs
+   laggards. The finding is then "finish the adoption", not "invent an
+   abstraction".
+5. **Verify dead code before claiming it**: a public `def` with no callers
+   needs a repo-wide grep of the function name (all arities) across `lib/`,
+   `test/`, and templates before being declared unused.
+
+### Report format
+
+Per finding: **What** (one line), **Where** (file:line per copy),
+**Evidence** (diff result or identical snippet), **Suggestion** (extract to
+X / delegate to existing Y), **Impact** (high/medium/low + estimated LOC
+saved). End with a quick-wins table ordered by impact/effort. Only verified
+file:line findings — no guesses.
+
+### Pitfalls
+
+- **Prefer "finish existing adoption" over new abstractions** — introducing
+  a second shared module next to a half-adopted one makes the mess worse.
+- **Count adoption, not just duplication** — `grep -c` per sibling file
+  tells you whether the pattern is "never extracted" or "half the callers
+  still copy".
+- **Umbrella apps**: run per-app (`apps/*/lib`), not just the root `lib/`.
+- Don't propose extracting a helper used only twice unless a third consumer
+  is obviously coming.
 
 ## References
 

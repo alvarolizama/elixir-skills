@@ -85,7 +85,7 @@ flowchart TD
   Q -->|"Tests, ExUnit, flaky tests,\\ncomponent testing"| TEST[elixir-testing]
   Q -->|"Git hygiene, history surgery,\\ncommit signing"| GIT[elixir-git]
   Q -->|"READMEs, docs, screenshots"| DOCS[elixir-docs]
-  Q -->|"Code review, architecture specs,\\nplan review"| REVIEW[elixir-review]
+  Q -->|"Code review, architecture specs,\\nplan review, redundancy"| REVIEW[elixir-review]
 
   style SETUP fill:#d1fae5,stroke:#059669
   style ECTO fill:#d1fae5,stroke:#059669
