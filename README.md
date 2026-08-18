@@ -4,7 +4,7 @@
 
 ### Elixir/Phoenix Development Framework
 
-One router skill. Thirteen category sub-skills. Every path a DAG, every flow ends in **VERIFY**.
+One router skill. Fourteen category sub-skills. Every path a DAG, every flow ends in **VERIFY**.
 
 Built to grow — add a sub-skill, register it in the router, done.
 
@@ -24,7 +24,7 @@ Built to grow — add a sub-skill, register it in the router, done.
 flowchart TD
     R["elixir-skills<br/><b>ROUTER</b><br/>core development rules<br/>+ DAG routing"] --> CATS
 
-    subgraph CATS["Category sub-skills (13)"]
+    subgraph CATS["Category sub-skills (14)"]
         SETUP["elixir-setup"]
         BUILD["elixir-build"]
         ECTO["elixir-ecto"]
@@ -38,6 +38,7 @@ flowchart TD
         GIT["elixir-git"]
         DOCS["elixir-docs"]
         REVIEW["elixir-review"]
+        RULES["elixir-review-rules"]
     end
 
     SETUP --> SETUPR["references/"]
@@ -53,6 +54,7 @@ flowchart TD
     GIT --> GITR["references/"]
     DOCS --> DOCSR["references/"]
     REVIEW --> REVIEWR["references/"]
+    RULES --> RULESR["references/"]
 
     style R fill:#4B275F,color:#fff,stroke:#2d1740,stroke-width:2px
     style SETUP fill:#d1fae5,stroke:#059669
@@ -68,6 +70,7 @@ flowchart TD
     style GIT fill:#d1fae5,stroke:#059669
     style DOCS fill:#d1fae5,stroke:#059669
     style REVIEW fill:#fde68a,stroke:#d97706
+    style RULES fill:#fde68a,stroke:#d97706
 ```
 
 ## Structure
@@ -89,7 +92,8 @@ elixir-skills/
     ├── elixir-testing/       pure Elixir + ExUnit, flaky tests, SSR components
     ├── elixir-git/           commit hygiene, history surgery, signing
     ├── elixir-docs/          READMEs, user docs, UI screenshots
-    └── elixir-review/        architecture specs, plan review, redundancy audit
+    ├── elixir-review/        architecture specs, plan review, redundancy audit
+    └── elixir-review-rules/  PR/diff review rules: idioms, tests, nil-safety, perf
 ```
 
 Each sub-skill has its own `SKILL.md` (DAG + consolidated patterns) and a
