@@ -1,25 +1,26 @@
 ---
 name: elixir-skills
-description: "Elixir/Phoenix development framework router — core development rules (shaping, planning, codebase review, reuse) and DAG routing to category sub-skills for build, Ecto, LiveView, auth, performance, deploy, testing, git."
-version: 1.0.0
+description: "Elixir/Phoenix development framework router — core development rules and DAG routing to 7 category sub-skills: setup, data, liveview, integration, testing, delivery, review. Load this first; it tells you which category to load."
+version: 2.0.0
 author: Álvaro Lizama
 license: MIT
 metadata:
   hermes:
     tags: [elixir, phoenix, liveview, ecto, development, framework, router]
-    related_skills: [elixir-setup, elixir-build, elixir-ecto, elixir-liveview, elixir-auth-security, elixir-performance, elixir-features, elixir-deploy, elixir-bridges, elixir-testing, elixir-git, elixir-docs, elixir-review, elixir-review-rules]
+    related_skills: [elixir-setup, elixir-data, elixir-liveview, elixir-integration, elixir-testing, elixir-delivery, elixir-review]
 ---
 
 # Elixir Skills — Development Framework
 
 This is the **router** of the Elixir development framework. Load it first: it
-defines the core development rules and routes you to the right category
-sub-skill based on the task.
+defines the core development rules, pins the verified modern stack, and routes
+the task to ONE of seven category sub-skills. Each category's own `SKILL.md`
+is the meta-skill for its territory: it carries the decision DAG, the distilled
+rules, and the index telling you which of its `references/` files to load.
 
 ## Core Development Rules
 
-These rules come from the operating principles for all Elixir work. They apply
-to **every** task, in every sub-skill. Never skip them.
+These apply to **every** task, in every category. Never skip them.
 
 1. **Investigate before concluding.** If you don't know something, say so and
    research it (docs, web, codebase) before speaking.
@@ -58,71 +59,95 @@ to **every** task, in every sub-skill. Never skip them.
 
 - Read before concluding: configs, schemas, contexts, routes, LiveViews,
   tests, migrations.
-- Check for N+1, missing preloads, unbounded lists, payload bloat, and
-  unguarded handlers.
-- Verify claims against the actual code — never trust memory or self-reports.
+- Grep for the real call sites, not the ones you remember.
 
 ### Reuse
 
-- If a module, helper, pattern, or dependency already exists, reuse it.
-- Prefer extending existing functions over adding parallel ones.
-- Before adding a dependency, confirm the standard library or existing deps
-  cover it.
+- If a helper, component, or context function already exists, use it.
+- A second implementation of an existing mechanism is a bug waiting to drift.
 
-## Router
+## Modern stack (verified 2026-09-05)
+
+Version pins this framework is written against — re-verify with `mix hex.info`
+or hex.pm before trusting any version-sensitive claim:
+
+| Layer | Version | Notes |
+|---|---|---|
+| Elixir | 1.20.x | Gradually typed language since 1.20; `mix compile --warnings-as-errors` stays the house gate |
+| Erlang/OTP | 29 (28 supported) | Elixir 1.20 requires OTP 27+ |
+| Phoenix | 1.8.x | Bandit is the default server; `<Layouts.app>` wrapping; `current_scope` auth assigns |
+| LiveView | 1.2.x | `view.assigns` removed in tests — assert on `render(view)`; NO `stream_update/3` (proposal only, never shipped) |
+| Ecto | 3.14.x | `rename/2` does not rename columns inside `alter table` — raw `ALTER TABLE ... RENAME COLUMN` |
+| Postgres | 16+ | Partitioned tables, JSONB, pgvector recipes verified here |
+| Tailwind | v4 | No `tailwind.config.js`; `@import "tailwindcss" source(none)` + `@source` directives in app.css |
+| Assets | app.js + app.css only | Vendor deps must be imported into the bundles; no external `<script src>` in layouts |
+
+Stack-agnostic rules (sobelow, mix aliases, git waves, E2E tooling) work on any
+Phoenix ≥ 1.7 app; version-sensitive rows above name the exact release where
+the behavior was verified.
+
+## Router DAG
 
 ```mermaid
 flowchart TD
-  Q{What is the task?} -->|"Scaffold / structure\\nnew umbrella, apps, domains"| SETUP[elixir-setup]
-  Q -->|"Compile fails, deps, mix,\\nhex publishing"| BUILD[elixir-build]
-  Q -->|"Queries, schemas, migrations,\\nJSONB, cascades, data models"| ECTO[elixir-ecto]
-  Q -->|"LiveView, HEEx, streams,\\nforms, i18n, dashboards"| LV[elixir-liveview]
-  Q -->|"Auth, OAuth, impersonation,\\nsecurity audit"| AUTH[elixir-auth-security]
-  Q -->|"Performance audit,\\nhot paths, N+1"| PERF[elixir-performance]
-  Q -->|"Build a feature end-to-end,\\nremove a feature, runtime config"| FEAT[elixir-features]
-  Q -->|"Release, deploy, PaaS,\\nDocker, SSL"| DEPLOY[elixir-deploy]
-  Q -->|"Agent bridges, MCP servers,\\nproxies, LLM gateways"| BRIDGES[elixir-bridges]
-  Q -->|"Tests, ExUnit, flaky tests,\\ncomponent testing"| TEST[elixir-testing]
-  Q -->|"Git hygiene, history surgery,\\ncommit signing"| GIT[elixir-git]
-  Q -->|"READMEs, docs, screenshots"| DOCS[elixir-docs]
-  Q -->|"Architecture specs, plan review,\\nredundancy audits"| REVIEW[elixir-review]
-  Q -->|"PR review / diff review\\nagainst idiom rules"| RULES[elixir-review-rules]
+    T[Task arrives] --> Q{What is the work about?}
 
-  style SETUP fill:#d1fae5,stroke:#059669
-  style ECTO fill:#d1fae5,stroke:#059669
-  style LV fill:#d1fae5,stroke:#059669
-  style REVIEW fill:#fde68a,stroke:#d97706
-  style RULES fill:#fde68a,stroke:#d97706
+    Q -->|"New app/umbrella, local env, mix/deps,\ncompile failures, runtime config, hex"| S["elixir-setup\nscaffold + build"]
+    Q -->|"Ecto schemas/queries/migrations,\nJSONB, FK/cascades, partitions, slow queries,\nperf audits of the data layer"| D["elixir-data\ndata layer"]
+    Q -->|"LiveView/HEEx UI: streams, hooks, forms,\npickers, client-DOM state, dashboards,\ni18n, LiveView consolidation"| L["elixir-liveview\nUI surface"]
+    Q -->|"Auth/OAuth/security, REST API, MCP servers,\nLLM gateways, agent↔Elixir bridges,\nnew-app integration"| I["elixir-integration\nboundaries"]
+    Q -->|"ExUnit conventions, flaky tests, sandbox,\nLiveViewTest traps, SSR widget tests"| X["elixir-testing\ntests"]
+    Q -->|"Commit waves, precommit gates, git hygiene,\nrelease/deploy, READMEs, screenshots"| V["elixir-delivery\nship it"]
+    Q -->|"Diff/PR review, plan review, architecture\nspecs, redundancy/Phoenix audits"| R["elixir-review\nsecond pair of eyes"]
+
+    S -->|done| Z[VERIFY per category SKILL.md]
+    D -->|done| Z
+    L -->|done| Z
+    I -->|done| Z
+    X -->|done| Z
+    V -->|done| Z
+    R -->|done| Z
+
+    style T fill:#4B275F,color:#fff,stroke:#2d1740,stroke-width:2px
+    style Z fill:#d1fae5,stroke:#059669
 ```
 
-Run ONLY the section you landed on. If the diagram sends you to another
-sub-skill, **stop here** and hand off — don't absorb that work.
+Multi-category tasks (the norm for feature waves): load the router, pick the
+primary category, and pull a second one only when the task crosses into it —
+e.g. a feature wave is `elixir-liveview` + `elixir-data` while building and
+`elixir-delivery` when committing. The category `SKILL.md` files cross-link
+via `related_skills`.
 
 ## Quick Navigation
 
-| Sub-skill | When to load it |
-| --- | --- |
-| `elixir-setup` | Scaffold a new umbrella/app, local bootstrap, multi-domain SaaS architecture |
-| `elixir-build` | Build failures, mix/deps issues, hex package publishing |
-| `elixir-ecto` | Ecto query pitfalls, JSONB, cascades, query tracing, data models |
-| `elixir-liveview` | LiveView debugging, HEEx design systems, forms, analytics, i18n, large-data performance |
-| `elixir-auth-security` | OAuth/social login, admin impersonation, security audits |
-| `elixir-performance` | Read-only performance audits, hot paths, redundancy audits |
-| `elixir-features` | End-to-end feature builds in umbrellas, feature removal, runtime config overrides |
-| `elixir-deploy` | `mix release` deploys, PaaS, Docker, SSL/CSRF edge cases |
-| `elixir-bridges` | Agent↔Elixir bridges, MCP servers/proxies, LLM gateways, dev tooling |
-| `elixir-testing` | Pure Elixir + ExUnit, flaky test isolation, SSR component testing |
-| `elixir-git` | Commit hygiene for parallel work, history surgery, commit signing |
-| `elixir-docs` | READMEs and user-facing docs, UI screenshot capture |
-| `elixir-review` | Codebase architecture specs, implementation plan review, redundancy audits |
-| `elixir-review-rules` | PR/diff review against distilled idiom rules: style, tests, nil-safety, perf, architecture, i18n |
+| Category | Load when… | Owns |
+|---|---|---|
+| `elixir-setup` | scaffolding, env, build/deps break | umbrella bootstrap, local env, multi-domain SaaS, mix/deps troubleshooting, compile warnings, runtime-config overrides, Tailwind/daisyUI assets, UUID primary keys, hex publishing |
+| `elixir-data` | the data layer bites | Ecto query pitfalls, JSONB fragments, EXPLAIN/tracing, FK `on_delete` cost, cascade design, partitioned-table maintenance, N+1 cookbook, read-only perf audits, migration/rename rules |
+| `elixir-liveview` | the UI surface misbehaves | LiveView debugging, streams vs assigns, hooks, HEEx design system, forms/wizards, search pickers, client-DOM vs morphdom, ETS-fed tables, analytics rollups, i18n, LiveView consolidation, browser E2E for client state |
+| `elixir-integration` | boundaries and APIs | auth/OAuth/impersonation, security audits, REST API patterns, MCP servers/proxies, LLM proxy gateways, agent↔Elixir dev bridges, prompt-injection defence, pgvector, new-app integration checklist |
+| `elixir-testing` | proving it works | ExUnit conventions + foot-guns, flaky/async isolation ladder, sandbox modes + seed dependency, LiveViewTest traps, SSR component testing for pure-React widgets |
+| `elixir-delivery` | shipping | precommit gates (format/sobelow/test), partitioned commit waves, test-failure triage, structure.sql drift, adversarial gate, API e2e smoke, git hunks/history/signing, release & deploy (PaaS/Docker/SSL), READMEs + screenshots |
+| `elixir-review` | judging work (yours or others') | diff-review idiom rulebook, implementation-plan review, architecture specs, Phoenix/redundancy audits, adversarial-review posture, bulk-edit safety |
 
-## How This Framework Grows
+## Installation
 
-- Each **category sub-skill** lives in `skills/<name>/` with its own
-  `SKILL.md` (DAG + consolidated patterns) and `references/` (absorbed
-  originals + detail).
-- To **add a new topic**: create a new sub-skill directory (or extend an
-  existing one), write its `SKILL.md` with a DAG, add references, and register
-  one row in the Quick Navigation table above.
-- The router never changes shape — it only grows its table.
+See README.md — clone, then copy or symlink `SKILL.md` + `skills/*` into your
+Hermes skills directory. The router is the entry point; categories load on
+demand.
+
+## How to Grow This Framework
+
+1. **New topic fits an existing category** → add a section to that category's
+   `SKILL.md` (and a reference file if it has depth).
+2. **New category** → create `skills/<name>/SKILL.md` with frontmatter + DAG,
+   add `references/`, and register one row in the router's Quick Navigation.
+3. **New depth on an existing pattern** → add a file under that category's
+   `references/` and link it from its `SKILL.md`.
+
+Contribution rules:
+
+- **English only** in all SKILL.md files and references.
+- **Generic, no project/brand references** — `MyApp` placeholders only.
+- **Every category SKILL.md has a decision DAG** and a `## VERIFY` section.
+- **Every flow ends in VERIFY** — real tool output, never self-assessment.
