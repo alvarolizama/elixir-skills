@@ -17,15 +17,15 @@ or the renamed `down` drops the new-name index the `up` never created.
 
 ```elixir
 def up do
-  drop_if_exists unique_index(:model_providers, [:credential_id],
-                   name: :model_providers_credential_id_unique_index)
-  create unique_index(:model_providers, [:credential_id, :credential_type],
-           name: :model_providers_credential_type_unique_index)
+  drop_if_exists unique_index(:api_keys, [:owner_id],
+                   name: :api_keys_owner_id_unique_index)
+  create unique_index(:api_keys, [:owner_id, :kind],
+           name: :api_keys_kind_unique_index)
 end
 
 def down do
-  drop_if_exists unique_index(:model_providers, [:credential_id, :credential_type],
-                   name: :model_providers_credential_type_unique_index)
+  drop_if_exists unique_index(:api_keys, [:owner_id, :kind],
+                   name: :api_keys_kind_unique_index)
 end
 ```
 

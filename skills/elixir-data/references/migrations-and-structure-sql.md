@@ -15,10 +15,10 @@ Fix — raw SQL, reversible inside `change/0`:
 ```elixir
 def change do
   execute(
-    "ALTER TABLE providers RENAME COLUMN rerank_dialect TO rerank_format",
-    "ALTER TABLE providers RENAME COLUMN rerank_format TO rerank_dialect"
+    "ALTER TABLE accounts RENAME COLUMN legacy_field TO canonical_field",
+    "ALTER TABLE accounts RENAME COLUMN canonical_field TO legacy_field",
   )
-  alter table(:providers) do
+  alter table(:accounts) do
     add :embedding_base_url, :string, null: true
   end
 end

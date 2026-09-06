@@ -25,8 +25,7 @@ A failure is preexisting (not introduced by the wave) when:
 
 If the test DB already has the wave's migrations applied, HEAD runs OLD code
 against the NEW schema — HEAD then fails spuriously on anything querying
-dropped columns (~a handful of dashboard/knowledge failures that exist only
-under the stash). Read the individual HEAD failures and discard
+dropped columns (a handful of failures that exist only under the stash). Read the individual HEAD failures and discard
 schema-mismatch noise. Only same-named tests failing for the SAME reason
 count as evidence.
 
@@ -38,11 +37,11 @@ count as evidence.
    don't touch.
 2. **Stale expectation encoding the CORRECT contract** — production drifted
    (renamed key, changed return shape) and the test still asserts the old
-   behavior. The red test is the only symptom of a latent bug. Real shape of
-   this: config still fires `run_scheduled(:community_summaries_nightly)`
-   after a communities→clusters rename while the job runner raises
-   "unknown job" — a nightly job was crashing, found only through the test.
-   Disposition: fix production + test together in a SEPARATE scoped
+   behavior. The red test is the only symptom of a latent bug. Classic shape:
+   a config still schedules a job under its OLD atom name after a rename, and
+   the job runner raises "unknown job" on every schedule tick — production
+   looks green while a nightly job crashes. Disposition: fix production +
+   test together in a SEPARATE scoped
    `fix:` commit, never mixed into the feature wave.
 3. **Product decision** — the test asserts a UI element a prior refactor
    removed. Disposition: report and ask the user which side is right; don't

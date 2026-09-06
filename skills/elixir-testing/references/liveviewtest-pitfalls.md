@@ -27,12 +27,12 @@ the value you submit, even though the underlying domain supports it.
 
 ```elixir
 # Option-feeders first:
-{:ok, team} = create_team_fixture()
-{:ok, view, _html} = live(conn, ~p"/team/#{team}/members/new")
+{:ok, parent} = create_parent_fixture()
+{:ok, view, _html} = live(conn, ~p"/parents/#{parent}/children/new")
 
 # dynamic options: drive the type-select, THEN fill the dependent form
-view |> form("#member-form", %{type: "admin"}) |> render_change()
-view |> form("#member-form", %{type: "admin", user_id: user.id}) |> render_submit()
+view |> form("#child-form", %{type: "advanced"}) |> render_change()
+view |> form("#child-form", %{type: "advanced", user_id: user.id}) |> render_submit()
 ```
 
 ## UUID-typed refute targets must be castable
@@ -51,8 +51,8 @@ refute MyApp.list_team_materials(Ecto.UUID.generate()) == [fixture_material]
 
 ## `html =~ value` collides with form chrome
 
-**Symptom:** `refute html =~ model_requested` never passes even though the row
-is gone — the model name also renders as `<option value="model-7747">` in a
+**Symptom:** `refute html =~ log.status` never passes even though the row
+is gone — the value also renders as `<option value="...">` in a
 filter select, so the raw HTML always contains the string.
 
 **Mechanism:** `html =~` is a raw substring check over the whole serialized
@@ -64,8 +64,8 @@ id-scoped element via `has_element?`. Bad anchors: model names, team names,
 statuses — anything the filter `<select>`/`<option>` also renders.
 
 ```elixir
-# BAD — model_requested is also the <option value> of the model filter
-refute html =~ log.model_requested
+# BAD — the deleted value is also the <option value> of a filter select
+refute html =~ log.status
 
 # GOOD — owner email only shows in the log row
 anchor = owner.email
@@ -159,7 +159,7 @@ concurrent tests insert.
   cascade children (assert each child id absent).
 - **ordering:** scope the query to the fixture so concurrent rows never enter
   the result set, then assert exact order —
-  `MyApp.Audit.list_logs(%{team_member_id: member.id})` returns only the
+  `MyApp.Audit.list_logs(%{owner_id: owner.id})` returns only the
   fixture's logs, so `assert [first, second] = ...` with
   `first.inserted_at >= second.inserted_at` is stable.
 

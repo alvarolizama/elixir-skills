@@ -163,13 +163,14 @@ what gets deleted + two-event handler (open/confirm), not `data-confirm`;
 at one of the three layers.
 
 **Discriminated subject types** — never overload one FK column to hold ids of
-two tables (`request_logs.team_member_id` holding `services.id` too): inserts
-silently violate the FK via an async worker (5 retries then drop → logs
-silently vanish, stats show zero). Fix: dedicated `service_id` FK +
-`subject_type` discriminator + nullable original id (original FK stays — NULL
-passes its cascade); conditional `validate_required` in the changeset; combined
-filter `team_member_id == ^id or service_id == ^id` for consumers keying by a
-single binary id. Details: `references/cascade-deletes-and-fks.md`.
+two tables: the second kind's inserts violate the FK, and via an async
+worker with retries-then-drop the failure is SILENT (rows vanish, stats
+show zero). Fix: one FK column per subject kind + `subject_type`
+discriminator + nullable original id (original FK stays — NULL passes its
+cascade); conditional `validate_required` per kind in the changeset;
+consumers keying by one shared id space combine filters
+(`owner_id == ^id or secondary_id == ^id`). Details:
+`references/cascade-deletes-and-fks.md`.
 
 **Mixed FK types (int parent + uuid parent) in one schema** need THREE
 coordinated declarations: migration `references(:contexts, type: :binary_id, on_delete: :delete_all)`,
@@ -228,16 +229,16 @@ Shapes to grep and fix (`references/n-plus-one-and-preloads.md`):
 
 - **`Enum.map(list, fn x -> Context.helper(x) end)` where the helper
   re-preloads** — make the helper a pure function over data it doesn't own
-  (`combine_effective_limits(m.team, m)`), or guard
+  (pass the loaded assoc), or guard
   `Ecto.assoc_loaded?(...) || Repo.preload(...)`.
-- **Per-item aggregate in a loop** (`monthly_spend_for_member(m.id, tz)`) —
-  replace with one batched query `WHERE team_member_id IN (^ids)` grouped by
-  id → map lookup.
-- **Per-parent child query in a loop** — one preload:
-  `preload: [team_members: [:user, :api_key]]` (nested for multi-level).
+- **Per-item aggregate in a loop** — replace with one batched query
+  `WHERE id IN (^ids)` grouped by id → map lookup.
+- **Per-parent child query in a loop** — one preload on the parent query
+  (nested for multi-level chains).
 - **`Repo.all` + post-processing with `Repo.get` per row** — preload or join.
-- **Helper called twice per request** (same arg) — compute once, pass in;
-  memoize at the controller entry if the chain is deep.
+- **Context helper called per item that re-preloads or re-queries** — make
+  it a pure function over data it doesn't own (pass the already-loaded
+  assoc instead of the struct), or guard with `Ecto.assoc_loaded?/2`.
 - **`Repo.preload(struct, [:team], force: true)` issues a new SELECT every call, ignoring loaded data** — highest-severity hot-path finding; drop `force: true` or guard with `Ecto.assoc_loaded?/2`. **False positive**: WITHOUT `force: true`, `Repo.preload/3` is a no-op when already loaded — trace the outer query before reporting an N+1. Template accesses `item.user.email` with no matching preload = missing preload (medium unless hot path).
 ## 8. Performance Audit Funnel (read-only)
 Methodology for finding hot spots by reading code (no slow query in hand):

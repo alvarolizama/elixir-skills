@@ -188,8 +188,9 @@ snippet NEVER wins over the decision page.
 ### Snippet drift classes
 
 1. **Hashing/auth libraries** — Argon2 vs Bcrypt vs Comeonin; unify on ONE.
-2. **Schema field names vs code** — `role` vs `community_role`; schema is
-   the truth.
+2. **Schema field names vs code** — the schema column name wins over the
+   shorter name a snippet invents (`role` vs the schema's qualified
+   `team_role`); schema is the truth.
 3. **Status enums conflated** — parent-domain status (`active/blocked`) vs
    child-resource status (`active/suspended/deleted/maintenance/draft`).
 4. **ID types** — `binary_id` (UUID string) vs `integer`; `is_integer`
@@ -199,7 +200,7 @@ snippet NEVER wins over the decision page.
 6. **otp_app / nonexistent apps** — pointing at the umbrella root or a
    nonexistent app instead of the real owning app.
 7. **Module namespaces** — mixing web-app namespaces with a nonexistent
-   shared one; shared plugs live in core (`X.Plugs.*`).
+   shared one; shared plugs live in the core app (`Core.Plugs.*`).
 8. **Verification prerequisites** — a VERIFY step depending on something no
    todo creates (`mix release` without a `releases:` section).
 9. **Inconsistent thresholds/flags** — rate limits, session limits, TTLs
@@ -321,7 +322,6 @@ distribution reveals same-sized sibling clusters.
 - `references/diff-review-idiom-rules.md` — full rulebook (EX/TS/ERR/PF/AR/I18N/LG/NM) with anti-pattern/correct code pairs and the automation table. Load for every diff review.
 - `references/adversarial-review-protocol.md` — who-self-approves, blocking criteria, validate-and-extend, blast-radius enumeration. Load when reviewing anything that will be executed.
 - `references/plan-review.md` — plan/todo audit method, drift classes with code signatures, gaps, kanban hygiene. Load before executing any multi-todo plan.
-- `references/plan-review-example.md` — worked plan review (11 drift findings + 5 gaps) as a concrete checklist. Load to see each drift class in the wild.
 - `references/bulk-edit-safety.md` — safe multi-page bulk edits after review fixes: anchor-based edits, exact-match rules, hash verification, mermaid preservation. Load when applying plan corrections at scale.
 - `references/architecture-spec-audit.md` — spec production workflow (layers, mapping table, progressive writing, quality bar, pivots) and umbrella guidance. Load for reimplementation/porting requests.
 - `references/redundancy-audit.md` — grep+diff duplication hunt, adoption counting, dead-code verification. Load when asked to find reusable/duplicated code.

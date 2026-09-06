@@ -117,7 +117,7 @@ same private function, it's duplicated.
   graph LiveView and its helpers module.
 
 **Fix:** Extract to a shared module (`MyApp.Slug`,
-`MyAppWeb.PageTypes`). Single source of truth; all consumers call the
+`MyAppWeb.TypeLabels`). Single source of truth; all consumers call the
 shared module.
 
 ### 6a. PITFALL: Hidden auto-imports cause false duplication reports

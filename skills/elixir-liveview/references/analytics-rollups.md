@@ -109,8 +109,8 @@ Coalesce Postgres queries across N connected LiveViews:
 - Rollup query returns both series; the chart builder is a pure function
   of the series maps.
 - Beware normalization double-counting: if the normalizer already
-  subtracts cache from `prompt_tokens`, then
-  `total_input = prompt_tokens + cache_read_tokens` — don't add cache
+  subtracts cache tokens from the prompt-token field, then
+  `total_input = input_tokens + cache_tokens` — don't add cache
   again.
 - "$0.00 cost with requests > 0" ⇒ the raw token fields aren't reaching
   the estimator — find where the totals dropped a dimension.

@@ -35,7 +35,7 @@ effective method is manual pattern-hunting with grep + diff.
      controller copies the changeset error formatter
    - `defp titleize` / `def titleize`
    - `get_or_create` / `get_or_insert`
-   - `def run_scheduled` — jobs copy the resolve-default-context dance
+   - Scheduled-job entry points — jobs copy the same preamble (default-context resolution, per-workspace iteration)
    - `on_conflict` — idempotent insert patterns get cloned with the
      surrounding boilerplate
    - Domain-specific blocks: try/rescue wrappers, `if context do ... else

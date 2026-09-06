@@ -62,12 +62,12 @@ grep -c "Task #PID" full_run.log            # >0 = class 3 zombies, even in gree
 
    ```elixir
    # BEFORE — flaky: counts rows for ALL teams
-   results = MyApp.Metrics.Rollup.breakdown_by_model(nil, from: hours_ago(72))
+   results = MyApp.Metrics.breakdown(nil, from: hours_ago(72))
    assert length(results) == 1
 
-   # AFTER — deterministic: only the fixture's team
-   {_member, team} = team_member_fixture()
-   results = MyApp.Metrics.Rollup.breakdown_by_model(team.id, from: hours_ago(72))
+   # AFTER — deterministic: only the fixture's parent
+   team = parent_fixture()
+   results = MyApp.Metrics.breakdown(team.id, from: hours_ago(72))
    assert length(results) == 1
    ```
 
@@ -108,7 +108,7 @@ assert Enum.any?(MyApp.Catalog.list_providers(), &(&1.id == p1.id))
 refute Enum.any?(MyApp.Catalog.list_providers(), &(&1.id == provider.id))
 
 # ordering: scope the query to the fixture so concurrent rows never enter
-logs = MyApp.Audit.list_logs(%{team_member_id: member.id})
+logs = MyApp.Audit.list_logs(%{owner_id: owner.id})
 assert [%{first: true}, second] = logs
 assert first.inserted_at >= second.inserted_at
 ```

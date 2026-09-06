@@ -4,7 +4,7 @@
 drift and duplicate; the durable fix is ONE generic LiveView
 parameterized by the URL, with routes restructured so a wildcard doesn't
 swallow first-class routes. Also fires any time
-`~p"/#{@workspace_slug}/..."` starts raising
+`~p"/#{@org_slug}/..."` starts raising
 `cannot convert nil to param`.
 
 ## Verify consolidation is correct BEFORE starting
@@ -14,7 +14,7 @@ swallow first-class routes. Also fires any time
   events, only the type, back path, and nav highlight differ),
   consolidation is right.
 - Confirm the shared heavy lifting already lives in a helper that takes
-  the type as a param (e.g. `PageDetail.load_page_detail/4` with `type`,
+  the type as a param (e.g. `load_entry/4` with `type`,
   `active_nav`, `redirect_to`). The generic wrapper should be THIN — no
   new logic.
 - Grep the whole `lib/` AND `test/` for old route refs before deleting
@@ -23,10 +23,10 @@ swallow first-class routes. Also fires any time
 ## The pattern
 
 1. Resolve the type from `params` in `mount`/`handle_params`
-   (e.g. `PageTypes.type_from_path(params["type"])`).
+   (e.g. `TypeResolver.from_params(params["type"])`).
 2. Guard mount: invalid type → `push_navigate` home instead of
    rendering.
-3. Build back/page paths from `workspace_slug + type + slug` in ONE
+3. Build back/page paths from `org_slug + type + slug` in ONE
    helper, not inline.
 4. Delete the per-type LiveViews AND their test files (`rm` them — don't
    leave stubs).
@@ -36,24 +36,15 @@ swallow first-class routes. Also fires any time
 
 ## Pitfall: route ordering — first-class routes BEFORE the generic wildcard
 
-Phoenix matches routes in **definition order**. A generic
-`live "/:workspace_slug/:type", PagesLive, :index` defined BEFORE
-`live "/:workspace_slug/activity", ActivityLive, :index` swallows it —
-`:type` captures `"activity"`. Same static-before-wildcard rule that
-governs the root scope.
-
-```elixir
-# Correct order — first-class entities/views first, generic LAST
-live "/:workspace_slug/goals", GoalLive, :index
-live "/:workspace_slug/activity", ActivityLive, :index
-live "/:workspace_slug/search", SearchLive, :index
-# ... generic catch-all last:
-live "/:workspace_slug/:type", PagesLive, :index
-```
+Phoenix matches routes in **definition order**: a generic segment
+(`/:type`) defined BEFORE a static path swallows it — the static path's
+literal never survives, `:type` captures its value. Same
+static-before-wildcard rule that governs the root scope. First-class
+views go first in the router, the generic catch-all LAST.
 
 ## Pitfall: `~p` with nil interpolation crashes at runtime
 
-`~p"/#{@workspace_slug}/..."` raises
+`~p"/#{@org_slug}/..."` raises
 `ArgumentError: cannot convert nil to param` (via
 `Phoenix.Param.Atom.to_param/1`) when the assign is nil — e.g. an
 instance-level page rendered without a selected workspace. **Both**
@@ -64,15 +55,15 @@ fixes are needed:
    template never sees nil:
 
    ```elixir
-   {context, workspace_slug} =
+   {context, org_slug} =
      case context do
-       nil -> {MyApp.Knowledge.get_workspace_by_slug(slug), slug}  # slug string survives
+       nil -> {MyApp.Accounts.get_workspace_by_slug(slug), slug}  # slug string survives
        ctx -> {ctx, ctx.slug}
      end
    ```
 
 2. **In the layout/sidebar, guard workspace-scoped links** with
-   `:if={@workspace_slug}` and render only global items (dashboard,
+   `:if={@org_slug}` and render only global items (dashboard,
    settings, docs) when nil. Otherwise the `~p` interpolation in the
    sidebar nav crashes before the template even renders.
 
@@ -87,10 +78,10 @@ maps.
 
 ## Pitfall: type-inference warning on `is_nil(slug)`
 
-After `case assigns[:workspace_slug] && ...` the compiler narrows the
+After `case assigns[:org_slug] && ...` the compiler narrows the
 type to `dynamic(not nil)` and warns
-`comparison between distinct types found: workspace_slug == nil`.
-Benign but noisy. Test `is_nil(assigns[:workspace_slug])` (direct map
+`comparison between distinct types found: org_slug == nil`.
+Benign but noisy. Test `is_nil(assigns[:org_slug])` (direct map
 access) rather than a previously-bound local var to dodge the
 narrowing.
 
@@ -117,7 +108,7 @@ patches on the same region, rewrite the whole function/file with
 - [ ] `mix compile --warnings` → zero warnings
 - [ ] `mix test` failure set == baseline (via `git stash` + `git stash pop`)
 - [ ] First-class routes defined before the generic wildcard
-- [ ] No `~p"/#{@workspace_slug}` interpolation can see nil (mount
+- [ ] No `~p"/#{@org_slug}` interpolation can see nil (mount
       fallback + `:if` guard)
 - [ ] Deleted per-type LiveViews AND their test files
 - [ ] All `~p` refs updated in lib AND tests

@@ -53,7 +53,7 @@ defp resolve_search(%{"ns" => %{"thing_id_display" => q}}), do: q || ""
 defp resolve_search(_),                               do: ""
 ```
 
-Keys must match template `name="ns[thing_id_display]"` EXACTLY. A
+Keys must match template `name="ns[item_id_display]"` EXACTLY. A
 missing clause falls through to the fallback silently and wipes the
 query every keystroke.
 
@@ -63,11 +63,11 @@ query every keystroke.
 <div class="relative" phx-click-away="close_pickers">
   <input
     type="text"
-    name="model_provider[scope_member_id_display]"
+    name="ns[item_id_display]"
     value={@search}
     placeholder="Search…"
     phx-focus="open_picker"
-    phx-value-picker="member"
+    phx-value-picker="item"
     phx-change="scope_search"
     phx-debounce="200"
     autocomplete="off"
@@ -93,7 +93,7 @@ query every keystroke.
 
 Key rules:
 
-- **Name every searcher** (`model_provider[...]` even though nothing
+- **Name every searcher** (`ns[...]` even though nothing
   casts it) — unknown keys are dropped at cast time, but the name is
   what `phx-change` serializes from.
 - Two inputs sharing one `name=` is safe when their branches are
@@ -131,18 +131,18 @@ a sibling unnoticed.
   `has_element?(view, ~s(input[name="ns[...]"]))`.
 - **Copy flash text EXACTLY** from source, including
   pluralization/casing: `"#{n} providers assigned."` does NOT contain
-  `"Provider assigned"`. An assert written from memory fails while the
+  `"Item assigned"`. An assert written from memory fails while the
   feature works.
 - Drive events with the EXACT wire payload shape (nested maps included)
   — that pins the payload contract in CI:
 
 ```elixir
-view |> render_click("open_picker", %{"picker" => "team"})
+view |> render_click("open_picker", %{"picker" => "item"})
 assert render(view) =~ "(bound row visible)"
 view |> render_click("pick_item", %{"item_id" => id, "item_label" => name})
 assert render(view) =~ ~s(value="#{name}")   # reflected
 refute render(view) =~ "(actual)"            # closed
-view |> render_change("scope_search", %{"model_provider" => %{"scope_team_id_display" => q}})
+view |> render_change("scope_search", %{"ns" => %{"item_id_display" => q}})
 ```
 
 - Born-closed is assertable: `refute render(view) =~ marker` right after

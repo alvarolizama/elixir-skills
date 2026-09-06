@@ -10,20 +10,20 @@ boundaries BEFORE writing schemas so later features build on a stable split.
 MyApp/  (umbrella)
 ├── core/          ← domain pure: schemas, contexts, Repo, migrations (NO web)
 ├── harness/       ← OTP app (no port): agents, GenServers, orchestration, queues
-├── channels/      ← OTP app (no port): persistent connections (WhatsApp, Telegram)
-├── portal/        ← 4000 — platform's own customer control center
-├── communities/   ← 4001 — product A: membership/community sites, multi-host
-├── landings/      ← 4002 — product B: landing/funnel builder, multi-host
+├── channels/      ← OTP app (no port): persistent connections (chat/messaging)
+├── dashboard/     ← 4000 — platform's own customer control center
+├── product_a/     ← 4001 — customer-facing product A, multi-host
+├── product_b/     ← 4002 — customer-facing product B, multi-host
 └── api/           ← 4003 — machine frontier: integrations, bots, webhooks
 ```
 
 Rules that shaped it (keep them):
 
 1. **Two-layer SaaS**: the platform sells to customers who deliver products to
-   THEIR end users. Platform's own area = portal; customer-delivered products
-   = their own multi-host apps.
+   THEIR end users. Platform's own area = the dashboard app; customer-delivered
+   products = their own multi-host apps.
 2. **Naming**: name apps for the PRODUCT they serve, not the consumer role —
-   `communities`, not `members` (`member` is the end-user role). Distinct
+   the end-user role name (`member`) must not become the app name. Distinct
    names, distinct meanings.
 3. **Separate the builder from its publication runtime**: the landing-page
    builder UI lives in the dashboard app; the multi-host runtime that SERVES
@@ -31,7 +31,7 @@ Rules that shaped it (keep them):
    separate app with its own auth (API keys), rate limits, and lifecycle —
    never share the browser-session pipeline with it.
 4. **OTP apps without ports are legitimate umbrella members**: harness and
-   channels get their own supervision trees, so a WhatsApp reconnect storm
+   channels get their own supervision trees, so a chat-channel reconnect storm
    doesn't restart orchestration and hot-reload can't touch them.
 5. **Migrate in exactly one place** (`core`). All web apps share one Repo;
    one deploy step runs migrations.
@@ -136,8 +136,8 @@ whole proxy.
 - **Builder UI in the wrong app** — the editor is a dashboard feature; the
   publication runtime is multi-host. Don't fuse them into a "funnels app"
   unless the builder IS the product with its own deploy cycle.
-- **Membership confusion** — the end-user role is `member`; the product app
-  is `communities`. Keep the names distinct.
+- **Role-vs-product name confusion** — the end-user role name (`member`) must
+  never become the product app name; keep the two vocabularies distinct.
 
 ## Verification
 

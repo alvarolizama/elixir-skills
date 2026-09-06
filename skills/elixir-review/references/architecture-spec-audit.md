@@ -102,9 +102,10 @@ Good: `attr`/`slot` declarations + a `~H"""` template.
 - Over-specifying trivial parts — focus on architectural decisions, data
   model, rendering pipeline, integration surfaces.
 - Ignoring the "why" — explain each decision briefly.
-- Assuming all document types share one canvas — if multiple types exist
-  (slides 16:9 vs portrait ebooks), add a size field from the start;
-  canvas, thumbnails, overview, defaults, and export all branch on it.
+- Assuming all document types share one canvas — if multiple types with
+  different aspect ratios or orientations can exist, add a size field from
+  the start; canvas, thumbnails, overview, defaults, and export all branch
+  on it.
 - Patching when you should rewrite (concept pivot).
 
 ## Audit: read → baseline → findings → phased plan

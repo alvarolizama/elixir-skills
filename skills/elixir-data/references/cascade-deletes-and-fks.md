@@ -8,7 +8,7 @@ special shapes (discriminated subjects, mixed FK types, confirmation modal).
 
 ```elixir
 ** (Ecto.ConstraintError) constraint error when attempting to delete struct:
-* "model_pricing_model_provider_id_fkey" (foreign_key_constraint)
+* "pricing_provider_id_fkey" (foreign_key_constraint)
 ```
 
 This means a missing cascade rule at one of the three layers. Fixing only one
@@ -43,7 +43,7 @@ audit row survives (attribution may be lost, which is acceptable).
 3. Decide delete vs nilify vs restrict (decision table above).
 4. Add a regression test: create the child, assert parent delete succeeds.
    A test that creates only the parent won't catch a missing cascade — the
-   test must create the child + dependents (member + api_key + log) first.
+   test must create the parent + child + grandchild rows first.
 5. Update the migration FK.
 6. Add `on_delete` to the schema association.
 7. `mix test && mix precommit`.
@@ -59,8 +59,7 @@ audit row survives (attribution may be lost, which is acceptable).
   `ALTER TABLE <child> ADD CONSTRAINT ... FOREIGN KEY (...) REFERENCES ... ON DELETE CASCADE;`
 - **Composite PKs break `Repo.get/2`** — use `Repo.get_by/2` with all PK fields.
 - **User deletion with NOT NULL FKs** — present the tradeoff: hard cascade
-  (loses history) vs soft-delete/anonymize (preserves history) vs ghost-member
-  transfer. This is a product decision, not a plumbing one.
+  (loses history) vs soft-delete/anonymize (preserves history) vs transferring the rows to an anonymous owner. This is a product decision, not a plumbing one.
 - **Destructive cascades need a confirmation modal** — `data-confirm` is
   insufficient; use a `<dialog>` modal listing exactly what gets deleted, with
   a two-event handler pattern:
@@ -93,47 +92,42 @@ admin cannot be deleted, self-delete prevented, both re-validated server-side.
 
 ## Discriminated subject types — never overload one FK column
 
-Symptom: `request_logs.team_member_id` was overloaded to hold EITHER a real
-`team_members.id` OR a `services.id`. Inserts for services violated the real
-FK — and because writes went through an async worker with retries-then-drop,
-the failure was SILENT: nothing raised in the hot path, the log rows simply
-never appeared, downstream stats showed zero service traffic.
+The rule: one FK column references exactly ONE table. When a row can belong
+to two kinds of subjects, overloading the column (primary id OR secondary
+id) breaks silently:
 
-Diagnosis — never trust "it should be logged"; probe the DB directly:
+- Inserts for the secondary kind violate the real FK.
+- If writes go through an async worker with retries-then-drop, nothing
+  raises in the hot path: rows simply never appear and downstream stats
+  show zero for that kind.
 
-```bash
-psql "$DATABASE_URL" -c \
-  "INSERT INTO request_logs (id, team_member_id, model_requested, inserted_at)
-   VALUES (gen_random_uuid(), '<service_id>', 'test', now());"
-# ERROR: violates foreign key constraint "request_logs_team_member_id_fkey"
-# DETAIL: Key (team_member_id)=(<service_id>) is not present in table "team_members".
+Diagnose by probing the DB directly — never trust "it should be logged":
+
+```sql
+-- reproduce with a manual INSERT of the suspect id into the FK column
+INSERT INTO events (id, owner_id, inserted_at)
+VALUES (gen_random_uuid(), '<suspect_id>', now());
+-- ERROR: violates foreign key constraint "events_owner_id_fkey"
 ```
 
-Fix — discriminated subject pattern:
-1. Migration (partitioned → raw SQL):
-   `ALTER TABLE ... ALTER COLUMN team_member_id DROP NOT NULL;`
-   `ADD COLUMN IF NOT EXISTS service_id uuid REFERENCES services(id) ON DELETE CASCADE;`
-   `ADD COLUMN IF NOT EXISTS subject_type varchar(255) NOT NULL DEFAULT 'user';`
-   `CREATE INDEX ... ON request_logs (service_id, inserted_at DESC);`
-   Key insight: the original FK is NOT dropped — FKs allow NULL, so it still
-   cascades for user rows and passes for service rows.
-2. Schema: `field :subject_type, :string, default: "user"`,
-   `belongs_to :service, Service, foreign_key: :service_id, type: :binary_id`,
-   conditional validation — the DB no longer enforces NOT NULL, so the
-   changeset must:
-   `"user" -> validate_required([:team_member_id])`,
-   `"service" -> validate_required([:service_id])`.
-3. Write path: derive the triple from the struct —
-   `%TeamMember{user_id: nil}` → `%{subject_type: "service", team_member_id: nil, service_id: m.id}`;
-   `%TeamMember{}` → `%{subject_type: "user", team_member_id: m.id, service_id: nil}`.
-   Thread `subject_type` + `service_id` through async worker args and preloads.
-4. Consumers that key by a single binary id (members AND services share the
-   subject id space) must combine filters:
-   `where(rl, rl.team_member_id == ^id or rl.service_id == ^id)`.
-5. Blast radius: every query that assumed `team_member_id = service_id` must
-   switch to `service_id` (rollup breakdown joins `on rl.service_id == s.id`,
-   drill-downs `where rl.service_id == ^id`). Queries that JOIN on
-   `team_members` are naturally correct — service rows have `team_member_id = NULL`, inner joins exclude them.
+Fix — the discriminated subject pattern:
+
+1. Migration (partitioned tables → raw SQL): `DROP NOT NULL` the overloaded
+   FK; add one uuid FK column per secondary subject kind (each
+   `ON DELETE CASCADE`); add a `subject_type varchar NOT NULL DEFAULT
+   '<primary kind>'` discriminator; index each secondary column with the
+   usual sort column. KEEP the original FK — FKs allow NULL, so it still
+   cascades for primary-kind rows and passes for secondary-kind rows.
+2. Schema: `field :subject_type` (default primary kind) plus `belongs_to`
+   per secondary kind. The DB no longer enforces NOT NULL, so the changeset
+   must: conditional `validate_required` per `subject_type` value.
+3. Write path: derive `{subject_type, owner_id, secondary_id}` from the
+   subject struct; thread them through async worker args and preloads.
+4. Consumers keying by a single shared id space must combine filters:
+   `where(r, r.owner_id == ^id or r.secondary_id == ^id)`.
+5. Blast radius: every query that assumed the overloaded column switches to
+   the right column. Queries JOINing on the primary table stay naturally
+   correct — secondary rows have NULL there and inner joins exclude them.
 
 ## Mixed FK types (int parent + uuid parent) in a join schema
 

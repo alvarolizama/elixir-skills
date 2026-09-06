@@ -550,15 +550,12 @@ alias CoreApp.ExternalRepo
 types document exactly what the port accepts and make contracts verifiable.
 
 ```elixir
-# anti-pattern
+# anti-pattern — map() defeats Dialyzer
 @callback upsert_interaction(attrs :: map()) ::
-            {:ok, LastInteraction.t()} | {:error, Error.t()}
-# correct
-@callback upsert_interaction(
-            EmailInteraction.t()
-            | WhatsappInteraction.t()
-            | CallInteraction.t()
-          ) :: {:ok, LastInteraction.t()} | {:error, Error.t()}
+            {:ok, Interaction.t()} | {:error, Error.t()}
+# correct — an explicit struct type documents the port contract
+@callback upsert_interaction(Interaction.t()) ::
+            {:ok, Interaction.t()} | {:error, Error.t()}
 ```
 
 ### AR-03 — No hardcoded environment URLs — use runtime configuration

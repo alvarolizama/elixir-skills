@@ -49,7 +49,7 @@ mix archive.install hex phx_new --force            # if phx.new.ecto is missing
 mkdir -p apps && cd apps
 mix phx.new.ecto core --app core --no-assets --no-html --no-live --no-dashboard --no-mailer
 # web app:
-printf "Y\n" | mix phx.new.web portal --app portal
+printf "Y\n" | mix phx.new.web dashboard --app dashboard
 cd ..
 mix deps.get
 ```
@@ -61,7 +61,7 @@ umbrella's apps directory` (run from `apps/`).
 ### Elixir 1.20 umbrella rules
 
 - **App directory name MUST match the OTP app name** (`apps/my_app_core/`,
-  `apps/portal/` — never `apps/core/` for `:my_app_core`). Plans and
+  `apps/dashboard/` — never `apps/core/` for `:my_app_core`). Plans and
   subagent briefs must always quote the full directory name; a literal
   reading of `apps/core/` creates a broken tree.
 - If a non-Phoenix app starts `{Phoenix.PubSub, name: MyApp.PubSub}` in its
@@ -82,10 +82,10 @@ umbrella's apps directory` (run from `apps/`).
 ### Wiring a new web app to the shared core repo
 
 1. Add `{:core, in_umbrella: true}` to the web app's `mix.exs` deps.
-2. Declare no local repo: `config :portal, ecto_repos: []`; name the PubSub:
-   `config :portal, Portal.PubSub, adapter: Phoenix.PubSub.PG2`.
+2. Declare no local repo: `config :dashboard, ecto_repos: []`; name the PubSub:
+   `config :dashboard, Dashboard.PubSub, adapter: Phoenix.PubSub.PG2`.
 3. Start the PubSub in `application.ex` children:
-   `{Phoenix.PubSub, name: Portal.PubSub}`.
+   `{Phoenix.PubSub, name: Dashboard.PubSub}`.
 4. Re-point tests to the core sandbox in `test_helper.exs`
    (`Ecto.Adapters.SQL.Sandbox.mode(Core.Repo, :manual)`) and use
    `Core.DataCase` in `conn_case.ex`.
@@ -213,8 +213,8 @@ gitignore pattern.
   never cache unknown keys).
 - Layout: `core` depends on nothing; every other app depends on `core`
   only. OTP apps without ports (agents, channels) are legitimate. Name apps
-  for the PRODUCT they serve, not the user role (`communities`, not
-  `members`). Migrate in exactly one place.
+  for the PRODUCT they serve, not the end-user role. Migrate in exactly one
+  place.
 - Deploy: one container / many ports (4000–4003) mapped by the proxy, or
   per-app `MIX_ENV=prod mix release <app>`; `trusted_proxies` must be set
   for `x-forwarded-host` to be honored.

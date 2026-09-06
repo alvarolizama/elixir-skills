@@ -42,21 +42,21 @@ roll back together on ATTACH failure:
 
 ```sql
 -- 1. Standalone twin of the default partition: PK + ALL indexes (incl. INCLUDE)
-CREATE TABLE request_logs_2026_08_05 (LIKE request_logs_default INCLUDING ALL);
+CREATE TABLE events_2026_08_05 (LIKE events_default INCLUDING ALL);
 
 -- 2. Atomic move (single statement = single transaction with step 3)
 WITH moved AS (
-  DELETE FROM request_logs_default
+  DELETE FROM events_default
   WHERE inserted_at >= '2026-08-05' AND inserted_at < '2026-08-06'
   RETURNING *
 )
-INSERT INTO request_logs_2026_08_05 SELECT * FROM moved;
+INSERT INTO events_2026_08_05 SELECT * FROM moved;
 
 -- 3. Attach (default no longer holds the range, so this succeeds)
-ALTER TABLE request_logs ATTACH PARTITION request_logs_2026_08_05
+ALTER TABLE events ATTACH PARTITION events_2026_08_05
   FOR VALUES FROM ('2026-08-05') TO ('2026-08-06');
 
-ANALYZE request_logs_2026_08_05;
+ANALYZE events_2026_08_05;
 ```
 
 Verified semantics:
@@ -126,11 +126,10 @@ in the default partition until the nightly cron runs.
 ## Covering index for index-only aggregates
 
 ```sql
-CREATE INDEX IF NOT EXISTS request_logs_member_inserted_covering_idx
-ON request_logs (team_member_id, inserted_at)
-INCLUDE (id, provider_cost_usd, prompt_tokens, completion_tokens,
-         cache_read_tokens, cache_creation_tokens);
-DROP INDEX IF EXISTS request_logs_team_member_inserted_idx;  -- fully superseded
+CREATE INDEX IF NOT EXISTS events_owner_inserted_covering_idx
+ON events (owner_id, inserted_at)
+INCLUDE (id, /* every column the aggregate reads or returns */);
+DROP INDEX IF EXISTS events_owner_inserted_idx;  -- fully superseded
 ```
 
 - `id` in INCLUDE is mandatory when the query has `count(id)` — without it the
@@ -147,11 +146,11 @@ DROP INDEX IF EXISTS request_logs_team_member_inserted_idx;  -- fully superseded
 ## Verification funnel (must pass all)
 
 ```sql
-VACUUM ANALYZE request_logs;                     -- visibility map → Heap Fetches 0
+VACUUM ANALYZE events;                     -- visibility map → Heap Fetches 0
 SET enable_seqscan = off;
-EXPLAIN ANALYZE SELECT coalesce(sum(provider_cost_usd), 0), ..., count(id)
-  FROM request_logs
-  WHERE team_member_id = ANY(ARRAY[<uuid>]::uuid[]) AND inserted_at >= ... AND inserted_at <= ...;
+EXPLAIN ANALYZE SELECT coalesce(sum(cost_usd), 0), ..., count(id)
+  FROM events
+  WHERE owner_id = ANY(ARRAY[<uuid>]::uuid[]) AND inserted_at >= ... AND inserted_at <= ...;
 -- expect: Aggregate → Append → Index Only Scan per partition, Heap Fetches: 0
 ```
 
@@ -165,7 +164,7 @@ On a near-empty dev table the planner picks Seq Scan on its own — the
 - Use far dates (`~D[2099-03-01]`, `~D[2020-06-15]`) so tests never collide
   with real-date partitions.
 - Direct row inserts without the FK fixture chain:
-  `Repo.query!("INSERT INTO request_logs (id, model_requested, inserted_at) VALUES ($1, 'x', $2)", [Ecto.UUID.dump!(Ecto.UUID.generate()), DateTime.new!(date, ~T[12:00:00])])`
+  `Repo.query!("INSERT INTO events (id, inserted_at) VALUES ($1, $2)", [Ecto.UUID.dump!(Ecto.UUID.generate()), DateTime.new!(date, ~T[12:00:00])])`
   — `Ecto.UUID.dump!/1` (binary form) or Postgrex raises
   `DBConnection.EncodeError`; `timestamp` literals via `DateTime.new!/2`.
 - Assertions worth having: create + idempotent re-ensure (`:exists`); backfill

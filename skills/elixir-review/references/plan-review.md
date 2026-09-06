@@ -41,8 +41,9 @@ For each snippet, compare against the decision AND against siblings:
 1. **Hashing/auth libraries** — Argon2 vs Bcrypt vs Comeonin drift
    (`Bcrypt.verify_pass` in one todo, `Comeonin.Argon2.hashpwd` in
    another). Unify on ONE, per the decision.
-2. **Schema field names vs code** — `role` vs `community_role`,
-   `verification_token` vs `token`. The schema is the truth.
+2. **Schema field names vs code** — the schema column name wins over the
+   shorter name a snippet invents (`role` vs the schema's qualified
+   `team_role`, `verification_token` vs `token`). The schema is the truth.
 3. **Status enums conflated** — parent-domain status (`active/blocked`)
    vs child-resource status (`active/suspended/deleted/maintenance/draft`)
    must NOT be conflated; branch on the resolved resource's status via its
@@ -57,8 +58,8 @@ For each snippet, compare against the decision AND against siblings:
    real owning app (e.g. gettext config with `otp_app: :umbrella_root` —
    should be `:core`).
 7. **Module namespaces** — mixing `AppWeb.*` with a nonexistent shared
-   namespace. Shared plugs live in core (`X.Plugs.*`); each web app has
-   its own namespace; routers per app.
+   namespace. Shared plugs live in the core app (`Core.Plugs.*`); each web
+   app has its own namespace; routers per app.
 8. **Verification prerequisites** — a VERIFY step depending on something
    no todo creates (e.g. `MIX_ENV=prod mix release` without a `releases:`
    section in mix.exs). That's a new todo, not a working VERIFY.
@@ -67,9 +68,11 @@ For each snippet, compare against the decision AND against siblings:
    todo and concept.
 10. **Env-sensitive flags** — `secure: true` cookies break localhost dev;
     must be conditional: `secure: config_env() == :prod`.
-11. **Role mapping errors** — roles conflated across dimensions:
-    `org_role in [:manager, :admin]` when org_role is owner/collaborator
-    and manager/admin belong to platform_role.
+11. **Role mapping errors** — roles conflated across dimensions: a guard
+    matching values from one role axis against a column of the other
+    (tenant-level owner/collaborator vs platform-level manager/admin).
+    Enumerate each role axis and its allowed values before reviewing
+    authorization snippets.
 
 ## Gaps: plan deliverable vs todos
 

@@ -58,7 +58,7 @@ Cards carry `transition-all duration-300`; server-rendered port
 duration AND same easing (`cubic-bezier(0.4,0,0.2,1)`), else ports jump
 on frame 1 and edges redrawn from live rects trail behind. Kill the port
 transition during manual drag (sibling selector, e.g.
-`.wfe-dragging ~ span[data-wf-port]`) so ports hug the cursor
+`.card-dragging ~ span[data-port]`) so ports hug the cursor
 frame-by-frame.
 
 ### One `updated()` redraw isn't enough mid-transition

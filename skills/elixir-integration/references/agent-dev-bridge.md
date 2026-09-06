@@ -51,7 +51,7 @@ long-lived node's state.
   atoms at one boundary (`String.to_existing_atom/1`) — sprinkling
   conversions through tools leaks `ArgumentError`s into results.
 - Registry-before-server in the supervision tree: `use GenServer,
-  start: {Registry, keys: :unique, name: X.Registry}` style child ordering
+  start: {Registry, keys: :unique, name: MyApp.ToolRegistry}` style child ordering
   — the server's `start_link` looks up the registry.
 - Reply contract: return `{:ok, %Frame{...}}` shaped structs, not raw
   strings — one shape lets the client render every tool uniformly.

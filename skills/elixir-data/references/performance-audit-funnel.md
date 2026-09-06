@@ -45,7 +45,7 @@ Cross-reference with LiveView templates. If a template accesses
 
 ### 3. Trace the hot-path plug chain
 
-Auth plugs usually run `Repo.preload(member, [:team, :user, :api_key])`. Any
+Auth plugs usually run `Repo.preload(user, [:team, :profile])`. Any
 downstream `Repo.preload(member, [:team], force: true)` is redundant and
 critical — `force: true` ignores already-loaded data and issues a new SELECT
 every call:
