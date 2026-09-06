@@ -9,3 +9,6 @@
 # Temp
 *.tmp
 *.log
+
+.riel/
+_import/
