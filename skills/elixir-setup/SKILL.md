@@ -1,562 +1,306 @@
 ---
 name: elixir-setup
-description: Bootstrap, scaffold, and configure Elixir/Phoenix umbrella projects with mise, PostgreSQL, multi-domain architecture, and security principles baked in from day 1.
+description: "Use when bootstrapping Elixir/Phoenix umbrella apps: scaffold, env, multi-domain SaaS, mix/deps, publishes."
 version: 1.0.0
 author: Álvaro Lizama
-platforms: [macos, linux]
+license: MIT
 metadata:
   hermes:
-    tags: [elixir, phoenix, umbrella, setup, scaffolding, saas, multi-tenant]
-    related_skills: [elixir-build, elixir-ecto, elixir-deploy]
+    tags: [elixir, phoenix, umbrella, scaffold, setup, bootstrap, mise, postgres, hex, multi-tenant, saas]
+    related_skills: [elixir-skills, elixir-delivery, elixir-data]
 ---
 
 # Elixir Setup
 
-Consolidated reference for bootstrapping, scaffolding, and configuring Elixir/Phoenix umbrella projects — from environment setup through multi-domain SaaS architecture.
-
-## Decision DAG
+Scaffold + build category: new umbrella/app bootstrap, local environment
+setup, multi-domain SaaS architecture, mix/deps troubleshooting, compile
+failures, runtime-config overrides, and hex publishing.
 
 ```mermaid
-graph TD
-    A[Start: New or Existing Project?] -->|New| B[Scaffold Phase]
-    A -->|Existing| C[Bootstrap Phase]
+flowchart TD
+    A[Start] --> B{What is the task?}
+    B -->|New umbrella / new app| C[Scaffold: umbrella-bootstrap.md + scaffold-rebranding.md]
+    B -->|Local env won't boot| D[umbrella-bootstrap.md]
+    B -->|Multi-domain SaaS design| E[multidomain-saas.md]
+    B -->|mix/deps / compile / lock failures| F[mix-deps-troubleshooting.md]
+    B -->|runtime.exs / force_ssl / :eaddrinuse| G[runtime-config-overrides.md]
+    B -->|Verify a branch before push| H[compile-warnings-and-branch-validation.md]
+    B -->|Publish to hex.pm| I[hex-publishing.md]
+    B -->|UUID PKs / migrations / schema types| J[uuid-primary-keys.md + migration-lifecycle.md]
+    B -->|Assets / Tailwind v4 / daisyUI| K[assets-tailwind-daisyui.md]
 
-    B --> B1[Toolchain & Environment]
-    B1 --> B2[Scaffold Core Ecto App]
-    B2 --> B3[Scaffold Phoenix Web Apps]
-    B3 --> B4[Assets, Landing, Rebrand]
-    B4 --> B5[Multi-Domain Config]
-
-    C --> C1[Verify Toolchain]
-    C1 --> C2[Hex Org Auth]
-    C2 --> C3[DB & Migrations]
-
-    B5 --> D[Security & Performance]
-    C3 --> D
-    D --> E[Verification: compile + test]
-
-    style A fill:#f9f,stroke:#333
-    style E fill:#9f9,stroke:#333
+    C --> L[VERIFY: compile + test + phx.server + curl]
+    D --> L
+    E --> L
+    F --> L
+    G --> L
+    H --> L
+    I --> L
+    J --> L
+    K --> L
 ```
 
-## Table of Contents
+## Scaffold: adding apps to an umbrella
 
-1. [Toolchain & Environment](#toolchain--environment)
-2. [Scaffold Phase](#scaffold-phase)
-3. [Bootstrap Phase](#bootstrap-phase)
-4. [Multi-Domain Architecture](#multi-domain-architecture)
-5. [Security & Performance Principles](#security--performance-principles)
-6. [UUID Primary Keys](#uuid-primary-keys)
-7. [Subagent Execution](#subagent-execution)
-8. [Common Pitfalls](#common-pitfalls)
-9. [Verification Commands](#verification-commands)
-
----
-
-## Toolchain & Environment
-
-### mise (the #1 gotcha)
-
-Use [mise](https://mise.jdx.dev/) for Elixir/OTP version pinning and env management. **Never `source .env`** — mise loads `.env` automatically via `_.file`.
-
-```toml
-# .mise.toml
-[tools]
-elixir = "1.20.1-otp-27"
-erlang = "27.0"
-
-[env]
-_.file = ".env"
-```
-
-**Critical rules:**
-- Run `mise trust` in the repo root before any mise command
-- Always run commands via `mise x -- <cmd>` or `mise run <task>` — bare shell commands miss `.env` values
-- `.env` secrets: never commit; strip `@url:` markdown decoration from pasted content
-- Paste `.env` secrets as **single-line strings** — line continuations (`\`) break mise
-
-### Homebrew PostgreSQL
+Run Phoenix generators from inside `apps/`, NEVER the umbrella root.
 
 ```bash
-brew services info postgresql
-brew services start postgresql
-```
-
-Find your local role (Homebrew creates a superuser matching your macOS username, not `postgres`):
-```bash
-psql postgres -c "SELECT usename FROM pg_user;"
-```
-
-Use that username in `.env` with an empty password for dev/test.
-
-### Hex Organization Auth
-
-Search `mix.exs` for `organization: "<org>"` — private packages need auth:
-```bash
-# One time per machine
-mix hex.organization auth <org> --key <READ_ONLY_KEY>
-
-# Verify
-mix hex.organization list
-```
-
-Fix hex auth **before** `mix deps.get` — it blocks everything downstream.
-
----
-
-## Scaffold Phase
-
-### Umbrella Layout (Generic Pattern)
-
-```
-my_app/
-├── core/          ← Pure domain: schemas, contexts, Repo, migrations
-├── harness/       ← OTP app (no port): agents, GenServers, queues
-├── portal/        ← Port 4000: customer control center
-├── products/      ← Port 4001: multi-host product apps
-└── api/           ← Port 4002: machine frontier, webhooks
-```
-
-**Rule:** `core` depends on nothing; every other app depends on `core` only.
-
-### Short OTP App Names
-
-Use short names, not prefixed:
-- `:core`, `:portal`, `:products`
-- Directory must match OTP name exactly: `apps/core/`, `apps/portal/`
-
-### Secret Generation
-
-```bash
-cp .env.example .env
-mix phx.gen.secret | pbcopy   # SECRET_KEY_BASE_PORTAL
-mix phx.gen.secret | pbcopy   # SECRET_KEY_BASE_PRODUCTS
-```
-
-Paste into `.env`.
-
-### Adding Core Ecto App to Existing Umbrella
-
-```bash
-# Install generator if missing
-mix archive.install hex phx_new --force
-
-# Run from inside apps/, NOT umbrella root
+mix archive.install hex phx_new --force            # if phx.new.ecto is missing
 mkdir -p apps && cd apps
 mix phx.new.ecto core --app core --no-assets --no-html --no-live --no-dashboard --no-mailer
-
-# Back in umbrella root
-mix deps.get
-```
-
-Add to `config/config.exs`:
-```elixir
-config :core, ecto_repos: [Core.Repo]
-config :core, Core.Repo,
-  adapter: Ecto.Adapters.Postgres,
-  migration_primary_key: [name: :id, type: :binary_id],
-  migration_timestamps: [type: :utc_datetime_usec]
-```
-
-### Adding Phoenix Web App to Existing Umbrella
-
-```bash
-cd apps
+# web app:
 printf "Y\n" | mix phx.new.web portal --app portal
 cd ..
 mix deps.get
 ```
 
-**Required manual fixes:**
-1. Add `{:core, in_umbrella: true}` to web app's `mix.exs` deps
-2. Declare no local repo: `config :portal, ecto_repos: []`
-3. Start PubSub in `application.ex`: `{Phoenix.PubSub, name: Portal.PubSub}`
-4. Re-point tests to `Core.Repo` sandbox in `test_helper.exs`
-5. Remove Swoosh forward in router unless Swoosh is installed
-6. **Merge umbrella root config** — generator overwrites `config/runtime.exs` and `config/prod.exs`
+Errors that mean "wrong cwd": `The task "phx.new.ecto" could not be found`
+(no generator — install it) and `The ecto task can only be run within an
+umbrella's apps directory` (run from `apps/`).
 
-### Tidewave Integration
+### Elixir 1.20 umbrella rules
 
-Add to web app deps:
-```elixir
-{:tidewave, "~> 0.6", only: :dev}
-```
+- **App directory name MUST match the OTP app name** (`apps/my_app_core/`,
+  `apps/portal/` — never `apps/core/` for `:my_app_core`). Plans and
+  subagent briefs must always quote the full directory name; a literal
+  reading of `apps/core/` creates a broken tree.
+- If a non-Phoenix app starts `{Phoenix.PubSub, name: MyApp.PubSub}` in its
+  supervision tree, add `{:phoenix_pubsub, "~> 2.1"}` to its deps — full
+  `:phoenix` is NOT needed.
+- `@primary_key {:id, :binary_id, autogenerate: true}` — with
+  `autogenerate: false`, `Repo.insert` returns `id: nil`
+  (`Ecto.NoPrimaryKeyValueError`) because Ecto never reads DB defaults.
+- Ecto sandbox pool: `config/test.exs` alone does not apply the Sandbox —
+  the app is already started. Set the pool conditionally in
+  `Application.start/2` keyed on `Mix.env()` (or start the Repo manually in
+  `test_helper.exs`). Otherwise every test fails with
+  `cannot invoke sandbox operation with pool DBConnection.ConnectionPool`.
+- Missing `ecto_repos` after scaffolding:
+  `warning: could not find Ecto repos in any of the apps: [:core]` → add
+  `config :core, ecto_repos: [Core.Repo]` to `config/config.exs`.
 
-Mount **before** `Plug.Parsers`:
+### Wiring a new web app to the shared core repo
+
+1. Add `{:core, in_umbrella: true}` to the web app's `mix.exs` deps.
+2. Declare no local repo: `config :portal, ecto_repos: []`; name the PubSub:
+   `config :portal, Portal.PubSub, adapter: Phoenix.PubSub.PG2`.
+3. Start the PubSub in `application.ex` children:
+   `{Phoenix.PubSub, name: Portal.PubSub}`.
+4. Re-point tests to the core sandbox in `test_helper.exs`
+   (`Ecto.Adapters.SQL.Sandbox.mode(Core.Repo, :manual)`) and use
+   `Core.DataCase` in `conn_case.ex`.
+5. Remove the Swoosh mailbox forward from the generated router unless Swoosh
+   is installed.
+6. **Merge the umbrella root config back** — `phx.new.web` OVERWRITES
+   `config/runtime.exs` and `config/prod.exs`; re-add the core DB/runtime
+   config after scaffolding.
+7. Both endpoints need their `secret_key_base` in `config/test.exs`, or
+   tests die with `missing secret key base`.
+
+### Tidewave plug placement
+
+Strictly BEFORE `Plug.Parsers`, dev-only:
+
 ```elixir
 if Mix.env() == :dev do
   plug Tidewave
 end
 
-plug Plug.Parsers, ...
+plug Plug.Parsers, parsers: [:urlencoded, :multipart, :json], pass: ["*/*"],
+  json_decoder: Phoenix.json_library()
 ```
 
----
+After `Plug.Parsers` the body is already parsed and Tidewave raises. If live
+reload is used in dev, the code-reloading block goes after the static plug
+and BEFORE Tidewave. Modern `phoenix_ecto` names the migration-status plug
+`Phoenix.Ecto.CheckRepoStatus` (not `CheckPendingStatus`); if you get an
+undefined-module warning, update the name — do not add another dep.
 
-## Bootstrap Phase
+### Scaffold rebrand + favicon
 
-### Typical Bootstrap Sequence
+After `mix phx.new`, rebrand FOUR files (logo.svg, home.html.heex,
+root.html.heex `<.live_title>` suffix, layouts.ex `app/1` navbar) — recipe in
+`references/scaffold-rebranding.md`, which also has the zero-dependency
+macOS favicon.ico recipe (`sips` + Python `struct`) and the static-assets
+gitignore pattern.
+
+## Local environment (mise + Homebrew PostgreSQL + private Hex)
+
+- **mise loads `.env`; your shell does not.** Never `source .env`; always
+  run through `mise x -- <cmd>` or `mise run <task>`. `mise trust` first.
+- Pin the exact OTP build in `.mise.toml` (`elixir = "1.20.1-otp-27"` /
+  `erlang = "27.0"`); a loose `"1.20"` may resolve to an OTP that breaks on
+  your Erlang.
+- `.env` secrets: paste as single-line strings (line continuations break
+  mise with `malformed value in .env`); never commit `.env`.
+- Homebrew Postgres creates a superuser matching the macOS username, not
+  `postgres` — `psql postgres -c "SELECT usename FROM pg_user;"` to find it.
+- Private Hex orgs: `mix hex.organization auth <org> --key <KEY>` BEFORE
+  `mix deps.get`; silent success = exit 0. Diagnosis: `mix hex.organization
+  list` empty → not authed; `Failed to fetch record for hexpm:<org>/<pkg>` →
+  auth or org membership missing.
+- `mix phx.gen.secret` prints NOTHING on success (exit 0) — don't re-run.
+- Full bootstrap + verification sequence:
+  `references/umbrella-bootstrap.md`.
+
+## Mix & deps troubleshooting
+
+- **Lock outdated in `:prod` only**:
+  `lock outdated: the lock is outdated compared to the options in your
+  mix.exs`. Git deps pinned by `tag:` carry a SHA in the lock; Mix compares
+  SHAs. Fix: pin by `ref:` with the exact lock SHA, commit `mix.exs` +
+  `mix.lock` together.
+- **Manifest/lock drift**: `mix.exs` says `~> 0.5`, lock resolved `0.6.1`.
+  Align `mix.exs` to the resolved version and re-run `mix deps.get`.
+- **`mix.lock` invalid data / corrupted**: parallel subagents overwrote it.
+  Regenerate sequentially; orchestrator always runs `mix deps.get` itself
+  after parallel batches and commits the lock.
+- **Compile hangs at 0% CPU**: a `mix phx.server` beam holds `.beam` locks,
+  or a zombie compile lingers. `ps aux | grep -E 'mix (compile|phx.server)'`,
+  kill, then `mix compile --force --warnings-as-errors`.
+- **Never surgically delete `_build/<env>/lib/<app>/priv` subdirs** — priv is
+  mirrored (hardlinked/synced) back to source; deleting inside `_build/priv`
+  can delete source migrations/assets. Wipe the whole `_build` instead:
+  `rm -rf _build && mix deps.get && mix compile`.
+- **Piped gates mask exit codes**:
+  `mix precommit 2>&1 | tail` reports `tail`'s exit 0. Use
+  `mix precommit > log 2>&1; echo "EXIT: $?"` or `set -o pipefail`.
+- Subagent-execution pitfalls (timeout ≠ failure, file races, commit
+  sweeping, `.env` breaks, lock corruption): `references/mix-deps-troubleshooting.md`.
+- Hex publishing (pre-publish checklist, 2FA/device-flow traps, versioning):
+  `references/hex-publishing.md`.
+
+## Runtime config overrides
+
+- **`runtime.exs` overrides `test.exs`** → `mix test` dies with `:eaddrinuse`
+  on port 4000 (not the test.exs port). Guard listener config
+  (`server: true`, `http: [port: ...]`) inside
+  `if config_env() == :prod do`. Quick unblock: `PORT=4099 mix test`.
+- **`:eaddrinuse` in `mix run -e`** — the app boots the Endpoint. Use
+  `MIX_ENV=test mix run -e '...'` (test endpoint binds nowhere) or
+  `mix run --no-start -e '...'` with manual `Application.ensure_all_started`
+  for postgrex/ecto_sql + `Repo.start_link()`.
+- **`force_ssl` is compile-time** — setting it in `runtime.exs` aborts
+  release boot with the "different value ... during runtime compared to
+  compile time" error. Read `DISABLE_FORCE_SSL` in `config/prod.exs`;
+  `PHX_SCHEME=http` at runtime only affects URL generation.
+- **Never read secrets into module attributes** — `@attr` is evaluated at
+  compile time; a later env change silently leaves stale values. Read at
+  runtime or in `runtime.exs` into app env.
+- Full recipes: `references/runtime-config-overrides.md`.
+
+## Compile warnings & branch validation in umbrellas
+
+- Pre-existing warnings from other apps break
+  `mix compile --warnings-as-errors` for the whole umbrella. Isolate:
+  `git diff origin/main..HEAD --name-only` → compile without the flag
+  (must be exit 0) → cross-reference warnings against branch files → only
+  warnings on modified files count.
+- `mix test apps/<app>` swallows the suite summary behind sibling-app
+  compile warnings. Separate compile from test:
+  `MIX_ENV=test mix compile 2>/dev/null && mix test apps/api 2>/dev/null`
+  (then `| tail -3` for the count).
+- Detached HEAD after a `git checkout` makes `git diff origin/main..HEAD`
+  lie. Check `git rev-parse --abbrev-ref HEAD` (returns `HEAD` when
+  detached) before validating: `git checkout <branch>`.
+- Full methodology: `references/compile-warnings-and-branch-validation.md`.
+
+## Multi-domain SaaS architecture
+
+- One endpoint serves N hosts; `Host` / `x-forwarded-host` is the tenant
+  key. Resolve in a plug, fail CLOSED (`:error` → 404 + halt), cache in ETS
+  (~60s TTL, `:public`, `read_concurrency: true`, degrade gracefully,
+  never cache unknown keys).
+- Layout: `core` depends on nothing; every other app depends on `core`
+  only. OTP apps without ports (agents, channels) are legitimate. Name apps
+  for the PRODUCT they serve, not the user role (`communities`, not
+  `members`). Migrate in exactly one place.
+- Deploy: one container / many ports (4000–4003) mapped by the proxy, or
+  per-app `MIX_ENV=prod mix release <app>`; `trusted_proxies` must be set
+  for `x-forwarded-host` to be honored.
+- Security baked in day 1: fail closed, rate limit auth, session hygiene
+  (sliding + 4h max_age, secure/httpOnly/SameSite, tokens never in DOM),
+  CSP without `unsafe-inline`, body caps, audit log, `mix_audit` in
+  precommit, ETS hot-path caches, N+1 via signature change, circuit
+  breakers on external integrations.
+- Full principles: `references/multidomain-saas.md`.
+
+## UUID primary keys & migrations
+
+House default: `:binary_id` everywhere (no serial). Repo config sets
+`migration_primary_key: [name: :id, type: :binary_id]` +
+`migration_timestamps: [type: :utc_datetime_usec]`; every schema carries
+`@primary_key {:id, :binary_id, autogenerate: true}` and
+`@foreign_key_type :binary_id`. After changing key types, reset BOTH
+databases (`mix ecto.reset` + `MIX_ENV=test mix ecto.reset`) or tests fail
+with `Postgrex expected an integer ... got <<...>>`.
+
+Never modify committed migrations; verify schema↔migration type alignment
+with `psql -tAc "SELECT atttypid::regtype ..."`; when renaming indexes,
+drop the OLD name explicitly in `up`. Details and the cargo-cult field
+lifecycle in `references/uuid-primary-keys.md` and
+`references/migration-lifecycle.md`.
+
+## Assets (Tailwind v4 + daisyUI)
+
+- Tailwind v4 has no `tailwind.config.js` — config lives in `@theme {}` in
+  `app.css`; names must be `--{category}-{name}` (`--color-brand-500` →
+  `bg-brand-500`).
+- daisyUI themes are `@plugin "../vendor/daisyui-theme" { ... }` blocks in
+  oklch; keep theme names exactly `dark`/`light`, honor `@custom-variant`
+  and `@plugin` blocks.
+- To verify CSS when `mix assets.build` fails on unrelated Elixir errors:
+  `mix tailwind default` compiles only the CSS.
+- Palette, typography scale, elevation, skeleton, and micro-interactions:
+  `references/assets-tailwind-daisyui.md`.
+
+## VERIFY
+
+Prove the category works — run from an actual umbrella/app:
 
 ```bash
-mise trust
-mise x -- mix deps.get                    # needs hex org auth first
-mise x -- bash -lc 'cd apps/products && npm install --prefix assets'
-mise x -- bash -lc 'cd apps/core && mix ecto.create && mix ecto.migrate'
-mise x -- bash -lc 'cd apps/portal && mix phx.server'
-```
-
-Or `mise run bootstrap` if `.mise.toml` defines it.
-
-### Environment Verification
-
-```bash
-elixir --version
-erl -eval "erlang:display(erlang:system_info(otp_release)), halt()."  -noshell
-node --version
-pg_isready
-```
-
----
-
-## Multi-Domain Architecture
-
-Use when serving multiple customer domains on one Elixir/Phoenix codebase — the "one umbrella, many storefronts" pattern.
-
-### Multi-Host Resolution Pattern
-
-One endpoint serves N hosts. The `Host` header (or `x-forwarded-host`) is the tenant key:
-
-```elixir
-defmodule MyAppWeb.Plugs.Site do
-  import Plug.Conn
-
-  def call(conn, _opts) do
-    case Sites.resolve(conn.host) do
-      {:ok, site} -> conn |> assign(:site, site) |> assign(:site_host, conn.host)
-      :error -> conn |> put_status(:not_found) |> halt()
-    end
-  end
-end
-```
-
-Resolution supports two tenant types:
-```elixir
-def resolve(host) do
-  case Repo.get_by(Site, host: host, status: :active) do
-    nil ->
-      case Repo.get_by(Landing, domain: host, status: :published) do
-        nil -> :error
-        landing -> {:ok, %{type: :client_landing, landing: landing}}
-      end
-    site -> {:ok, %{type: :site, site: site}}
-  end
-end
-```
-
-### Deploy Topology
-
-- **One container, many ports** (start): one release boots all apps, each on its port (4000-4003); map domains → ports in the proxy
-- **One resource per app** (scale): per-app `mix release`, per-app Coolify resource/domain
-- Configure `trusted_proxies` so Phoenix honors `x-forwarded-host`
-- Set `force_ssl` per app in `prod.exs`
-
-### Naming Convention
-
-Name apps for the **PRODUCT they serve**, not the role:
-- `:products` (not `:members`) — the product is the community, `member` is the user role
-- Keep names distinct to avoid ambiguity
-
----
-
-## Security & Performance Principles
-
-Bake these in from day 1 — they are not optional refactors.
-
-### Fail Closed
-
-```elixir
-# nil/error/unknown → denied, never the reverse
-case Sites.resolve(conn.host) do
-  {:ok, site} -> assign(conn, :site, site)
-  :error -> put_status(conn, :not_found) |> halt()  # Closed by default
-end
-```
-
-- Mass assignment: whitelist allowed fields on update
-- Search resolves fail closed
-- Deleted/missing user → NOT admin
-
-### Rate Limiting
-
-```elixir
-# Login POST per IP: ETS fixed-window, 10/min
-# Counter cleared on successful login
-```
-
-- API keys: rate limit per token hash
-- Invalid/missing keys never cached long — else table becomes brute-force growth vector
-
-### Session Hygiene
-
-- Sliding expiration (`renew: true`) + 4h max_age
-- Session cookie: secure + httpOnly + SameSite lax
-- API tokens never reach the DOM: prefix-only + `push_event` copy
-- Mask credential names for non-admins
-- Filter sensitive params from Phoenix logs
-
-### Hot Path Optimization
-
-```elixir
-# ETS auth cache: token → identity + limits, 60s TTL
-# Postgres untouched on authenticated hot-path hits
-```
-
-- Batch queries: one `WHERE id IN (^ids) GROUP BY id` → map, lookup in memory
-- Accumulate as iodata (list of binaries), not `binary <> acc` (O(n²))
-- Composite indexes: `(foreign_key, inserted_at DESC)`
-- `compress: true` on endpoint — big JSON responses compress 5-10x
-
-### ETS Cache Graceful Degradation
-
-```elixir
-# Named ETS tables of NEW GenServers do NOT exist on already-running nodes
-# Code touching them must survive absence
-case :ets.whereis(:cache_table) do
-  :undefined -> nil  # Graceful fallback
-  _ref ->
-    rescue ArgumentError -> nil  # Table deleted during hot reload
-end
-```
-
-- Cache = optimization, NEVER a hard dependency
-- `:public` + `read_concurrency: true`
-- Invalidate on key rotation/revocation
-- Never cache invalid/missing keys
-
-### Circuit Breakers
-
-Every external integration (APIs, WhatsApp, LLM providers):
-- States: closed → open (N consecutive failures) → half-open (probe)
-- Kill stream task on first-token timeout (prevent fd leak)
-
-### N+1 Prevention
-
-```elixir
-# Change helper SIGNATURE to receive data, not struct
-# Wrong: def render_item(conn, item), do: item.assoc.name
-# Right: def render_item(conn, item, assocs), do: assocs[item.id].name
-
-# Pass preloaded data to avoid extra queries
-```
-
-- `maybe_preload` with `Ecto.assoc_loaded?/1` in shared helpers
-- Search excerpt in main query select (kills N+1 ts_headline)
-
----
-
-## UUID Primary Keys
-
-Use `:binary_id` (UUID) for all tables, not `:bigserial` integers.
-
-### Repo Config
-
-```elixir
-config :core, Core.Repo,
-  adapter: Ecto.Adapters.Postgres,
-  migration_primary_key: [name: :id, type: :binary_id],
-  migration_timestamps: [type: :utc_datetime_usec]
-```
-
-### Schema Pattern
-
-Every schema gets these module attributes:
-```elixir
-defmodule MyApp.Core.User do
-  use Ecto.Schema
-  import Ecto.Changeset
-
-  @primary_key {:id, :binary_id, autogenerate: true}
-  @foreign_key_type :binary_id
-
-  schema "users" do
-    field :email, :string
-    has_many :posts, MyApp.Core.Post
-  end
-end
-```
-
-### Migration Pattern
-
-```elixir
-# With migration_primary_key set, plain create table works
-create table(:users) do
-  add :email, :string, null: false
-end
-
-# Foreign keys specify type explicitly
-create table(:posts, primary_key: false) do
-  add :id, :binary_id, primary_key: true
-  add :user_id, references(:users, type: :binary_id, on_delete: :delete_all), null: false
-end
-```
-
-### Critical: Reset Both Databases
-
-After changing primary key types:
-```bash
-mix ecto.reset              # dev DB
-MIX_ENV=test mix ecto.reset # test DB ← THIS IS THE FIX
-```
-
----
-
-## Subagent Execution
-
-When delegating umbrella setup to background agents:
-
-### Sequential Dependencies
-
-1. **Core must finish first** — shared infra (Repo, config) before apps that depend on it
-2. **Parallel batches for disjoint file sets** — `portal` and `products` can run in parallel
-3. **Re-read after parallel batches** — concurrent edits to `*web.ex` or `endpoint.ex` can corrupt files
-4. **Run `mix deps.get` yourself** after parallel batches — subagents corrupt `mix.lock`
-5. **Fix root causes yourself** — when a subagent leaves non-compiling, read error and patch directly
-
-### Migration Ordering
-
-When multiple subagents create migrations:
-```bash
-ls apps/core/priv/repo/migrations | sort
-```
-Verify dependency order (e.g., `sites` tables before `members`). Rename files if needed.
-
-### Common Subagent Errors
-
-| Error | Fix |
-|-------|-----|
-| `PhoenixHTMLHelpers.Form.__using__/1 is undefined` | Import, don't use: `import PhoenixHTMLHelpers.Form` |
-| `conflicting embed_templates/1 import` | Remove `import Phoenix.Template, only: [embed_templates: 1]` — `use Phoenix.Component` already provides it |
-| `<.live_title>` undefined | Add `use Phoenix.Component` to `*Web.html/0` |
-| `secret_key_base missing in tests` | Add both endpoint configs in `config/test.exs` |
-| `mix.lock contains invalid data` | Run `mix deps.get` sequentially, commit before next batch |
-
----
-
-## Common Pitfalls
-
-### Phoenix 1.8 Specifics
-
-- **HTTP adapter not bundled**: add `{:bandit, "~> 1.0"}` or `{:plug_cowboy, "~> 2.0"}`; set `adapter: Bandit.PhoenixAdapter` in endpoint config
-- **`server: true` in prod**: both endpoints must set this in `config/runtime.exs`
-- **`import_config` at end**: must be at bottom of `config/config.exs` or test env loads dev DB
-- **LiveView sessions read-only**: use controllers for writes, `put_session/3` in plug, read in `mount/3`
-- **`render_slot(@inner_block)`**: correct API for slots, not `@inner_block.()`
-
-### Umbrella Structure
-
-- **One port per domain** is wrong mental model — ports belong to endpoints; domains map to ports via proxy
-- **`core` must never depend on web apps** — bidirectional deps defeat the purpose
-- **Schemas in foundation plan stay schema-free** — add features in later plans on stable base
-
-### Ecto Patterns
-
-- **JSONB array columns**: need `{:array, :map}` in BOTH schema AND migration; verify with `psql -tAc`
-- **NEVER modify committed migrations** — always create new ALTER migration
-- **`runtime.exs` leaking to all environments**: endpoint config must be inside `if config_env() == :prod do` block
-
-### Tidewave Placement
-
-```elixir
-# Correct: before Plug.Parsers
-if Mix.env() == :dev do
-  plug Tidewave
-end
-plug Plug.Parsers, ...
-
-# Wrong: after parsers — raises because body already parsed
-```
-
-### Subagent Races
-
-- Two agents editing same `*Web.ex` produces mangled macros
-- Always `read_file` and run `mix compile --warnings-as-errors` after parallel batches
-- Write files cleanly with `write_file` if corruption detected
-
-### .env Secrets
-
-- Never commit `.env` (gitignored by convention)
-- Paste as single-line strings — line continuations break mise
-- `mix phx.gen.secret` prints nothing on success (exit 0) — don't re-run
-
----
-
-## Verification Commands
-
-```bash
-# After every batch of tasks:
-mix compile --warnings-as-errors
-mix test
-
-# Dev server:
-mix phx.server
-
-# Database status:
-brew services info postgresql
-
-# Test DB loads test config:
+mix deps.get && mix compile --warnings-as-errors   # exit 0, no warnings in YOUR files
+mix test                                           # green suite
+mix phx.server &                                   # boots without :eaddrinuse
+curl -sf http://localhost:4000 | head -20          # 200 home
 MIX_ENV=test mix run -e 'IO.puts(Application.get_env(:core, Core.Repo)[:database])'
-
-# ETS cache table existence (guard for graceful degradation):
-iex> :ets.whereis(:cache_table)
+# → my_app_test (proves test config wins over runtime.exs defaults)
+psql postgres -c "SELECT usename FROM pg_user;"    # role exists
+hex user whoami && mix hex.organization list       # auth present before publish
 ```
 
-### Full Bootstrap Verification
-
-```bash
-mise trust
-mise x -- mix deps.get
-mise x -- mix compile --warnings-as-errors
-mise x -- mix test
-mise x -- bash -lc 'cd apps/core && mix ecto.create'
-MIX_ENV=test mise x -- bash -lc 'cd apps/core && mix ecto.create'
-mise x -- bash -lc 'cd apps/portal && mix phx.server &'
-sleep 3 && curl -s http://localhost:4000 | head -20
-```
-
----
+Expected shapes: `Generated <app> app` / `Finished in ... : N tests, 0
+failures`; `curl` returns 200; the env probe prints the test DB name; the
+grep-based brand scrub returns nothing under `lib/` (see scaffold-rebranding).
 
 ## References
 
-### Detail References (in this skill's `references/` directory)
-
-- **`references/phoenix-umbrella-project-setup/`** — step-by-step recipes for adding core Ecto and Phoenix web apps to existing umbrellas
-- **`references/phoenix-multidomain-saas/security-performance-principles.md`** — full distilled lessons from production security audits
-- **`references/phoenix-umbrella-project-setup/subagent-pitfall-fixes.md`** — concrete error patterns and exact fixes
-- **`references/phoenix-umbrella-project-setup/uuid-primary-keys.md`** — complete UUID primary key pattern with pitfall warnings
-- **`references/phoenix-umbrella-project-setup/brew-postgres-env.md`** — Homebrew PostgreSQL, mise env, and secrets cheat sheet
-
-### Scaffolded Files Checklist
-
-After `mix phx.new`, rebrand four files:
-1. `priv/static/images/logo.svg` — replace Phoenix bird with custom logo
-2. `lib/*_web/controllers/page_html/home.html.heex` — replace demo with real landing
-3. `lib/*_web/components/layouts/root.html.heex` — fix `<.live_title>` suffix
-4. `lib/*_web/components/layouts.ex` — replace Phoenix links with app CTAs
-
-### Favicon (macOS)
-
-```bash
-sips -s format png priv/static/favicon.svg --out /tmp/favicon_64.png
-# Then use Python struct to build multi-resolution .ico (see references/favicon-generation.md)
-```
-
-### Static Assets Gitignore
-
-```
-/apps/*/assets/node_modules/
-/apps/*/priv/static/assets/
-```
-
----
-
-*Generated: 2026-08-17 | Consolidated from phoenix-umbrella-project-setup, elixir-umbrella-bootstrap, phoenix-multidomain-saas*
+- `references/umbrella-bootstrap.md` — local env: mise/`.env`, Homebrew
+  Postgres, private Hex orgs, secrets, bootstrap sequence. Load when a
+  fresh clone won't boot or `mix deps.get` fails on unknown packages.
+- `references/scaffold-rebranding.md` — the four post-scaffold rebrand
+  files, favicon.ico recipe (macOS), gitignore. Load after every
+  `mix phx.new`.
+- `references/multidomain-saas.md` — umbrella layout, multi-host resolution
+  plug, deploy topology, security/perf non-negotiables. Load when designing
+  or reviewing a multi-domain platform.
+- `references/mix-deps-troubleshooting.md` — masked exits, subagent
+  timeouts/races/commit sweeps, `.env` breaks, lock corruption. Load when a
+  batch "passed" under suspicious numbers or the build hangs.
+- `references/runtime-config-overrides.md` — `runtime.exs` overrides,
+  `:eaddrinuse`, compile-time `force_ssl`, DB-driven feature overrides.
+  Load for runtime config crashes.
+- `references/compile-warnings-and-branch-validation.md` — warning
+  isolation against `git diff origin/main..HEAD`, swallowed test output,
+  detached HEAD. Load before validating any umbrella branch.
+- `references/uuid-primary-keys.md` — `:binary_id` schema/migration pattern,
+  both-DB reset trap, schema↔migration alignment, cargo-cult fields. Load
+  when adding tables or converting IDs.
+- `references/migration-lifecycle.md` — index renames, duplicate names,
+  failed-in-prod edits, build-tree hygiene. Load for migration failures.
+- `references/assets-tailwind-daisyui.md` — daisyUI theme blocks, oklch
+  palette, CSS design system, Tailwind v4 config model. Load for theming or
+  missing CSS.
+- `references/hex-publishing.md` — package metadata, interactive-prompt
+  traps (2FA/device flow), versioning, plug-halt gotcha. Load before any
+  `mix hex.publish`.

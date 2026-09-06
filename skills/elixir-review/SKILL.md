@@ -1,162 +1,169 @@
 ---
 name: elixir-review
-description: "Produce architecture specs from an existing codebase and audit implementation plans for cross-task consistency before executing."
+description: "Use when reviewing Elixir/Phoenix code, plans, or architecture: PR/diff review against idiom rules, plan audits before execution, redundancy audits, and codebase architecture specs."
 version: 1.0.0
 author: Álvaro Lizama
 license: MIT
 platforms: [macos, linux]
 metadata:
   hermes:
-    tags: [architecture, specs, code-review, plan-review, audit, consistency]
-    related_skills: [elixir-git]
+    tags: [code-review, idiom-rules, plan-review, redundancy-audit, architecture-specs, audit, nil-safety]
+    related_skills: [elixir-skills, elixir-delivery, elixir-data]
 ---
 
 # Elixir Review
 
-Consolidated reference for two review-shaped tasks: **producing
-architecture specs** from an existing codebase (for reimplementation or
-porting) and **auditing implementation plans** for cross-task consistency
-before executing them.
+Consolidated review category: **diff/code review** against a distilled
+Elixir/Phoenix idiom rulebook, **implementation-plan review** before
+execution, **redundancy audits**, and **architecture-spec production/audit**
+from an existing codebase. Everything is read-only until findings are
+confirmed with the requester.
 
 ## Decision DAG
 
 ```mermaid
-graph TD
-    A[Review task] -->|"Analyze codebase → specs\\nfor reimplementation/porting"| B[Architecture Specs]
-    A -->|"Audit a plan before\\nexecuting it"| C[Plan Review]
-    A -->|"Hunt duplicated code\\nto refactor"| D[Redundancy Audit]
+flowchart TD
+    A[Review request] --> B{What is being reviewed?}
+    B -->|"PR / diff / module"| C[Diff & Code Review]
+    B -->|"Plan + todos before execution"| D[Implementation Plan Review]
+    B -->|"Duplicated / reusable code"| E[Redundancy Audit]
+    B -->|"Existing codebase → specs or audit"| F[Architecture Specs & Audit]
 
-    B --> B1[Scope: manifest + structure]
-    B1 --> B2[Read systematically in layers]
-    B2 --> B3[Map concepts source → target]
-    B3 --> B4[Write specs progressively]
-    B4 --> B5[Quality bar: real code, DDL, mockups]
+    C --> C1[Get the real diff / code]
+    C1 --> C2[Scan against idiom rulebook]
+    C2 --> C3[Classify high / medium / low]
+    C3 --> C4[Report RULE-ID + file:line + why + fix]
 
-    C --> C1[Read project + plan]
-    C1 --> C2[Read ALL linked todos/specs]
-    C2 --> C3[Read authoritative design pages]
-    C3 --> C4[Cross-check snippets by drift class]
-    C4 --> C5[Check plan deliverable vs todos = gaps]
-    C5 --> C6[Present prioritized findings]
-    C6 --> C7[Confirm before applying]
+    D --> D1[Read project + plan]
+    D1 --> D2[Read ALL linked todos]
+    D2 --> D3[Read authoritative design pages]
+    D3 --> D4[Cross-check snippets by drift class]
+    D4 --> D5[Deliverable vs todos = gaps]
+    D5 --> D6[Present prioritized; confirm before applying]
+
+    E --> E1[Size codebase]
+    E1 --> E2[Spot same-sized siblings]
+    E2 --> E3[Grep copy-paste fingerprints]
+    E3 --> E4[Check partially-adopted shared module]
+    E4 --> E5[Verify dead code before claiming]
+
+    F --> F1[Scope: manifest + structure]
+    F1 --> F2[Read systematically in layers]
+    F2 --> F3[Map concepts source → target]
+    F3 --> F4[Write specs progressively / audit plan]
 
     style A fill:#f9f,stroke:#333
-    style B5 fill:#9f9,stroke:#333
-    style C7 fill:#9f9,stroke:#333
+    style C4 fill:#9f9,stroke:#333
+    style D6 fill:#9f9,stroke:#333
+    style E5 fill:#9f9,stroke:#333
+    style F4 fill:#9f9,stroke:#333
 ```
 
-## Part 1 — Architecture Specs
+## Part 1 — Diff & Code Review
 
-Use when the user wants to **analyze an existing codebase/system and produce
-architectural specification documents** for reimplementation — typically
-porting to a different tech stack, adding a major new dimension (e.g. MCP
-integration), or building a clone with modifications.
+Review Elixir/Phoenix code (PRs, diffs, agent output, self-review before
+commit) against the **idiom rulebook** in `references/diff-review-idiom-rules.md`.
+Every rule has a severity, a why, an anti-pattern, and the correct form;
+rule IDs are stable and citable (`EX-01`, `ERR-04`, ...).
 
-### When to use
+### Workflow
 
-- "Analyze this repo and create specs for a clone in X stack"
-- "Create specs for porting this to Elixir/Phoenix"
-- "Design the architecture for a version of this that also does Y"
-- "Spec out a reimplementation with MCP/agent support"
+1. **Get the actual code** — the diff, the changed files, the module under
+   review. Never review from memory or someone else's summary; a finding
+   needs a real `file:line`.
+2. **Scan against the rulebook** — style/idioms (EX-01..06), tests
+   (TS-01..05), error handling & nil safety (ERR-01..05), performance & DB
+   (PF-01..04), architecture (AR-01..03), i18n/correctness/naming
+   (I18N, LG, NM).
+3. **Classify severity**: high = merge blocker (bugs, leaks, broken
+   contracts, data-loss risk); medium = should fix (readability,
+   testability, idiomatic Elixir); low = nit.
+4. **Report** `RULE-ID (severity) + file:line + one-line why + the fix`.
 
-### Core workflow
+### Nil-safety rules that block merges (ERR)
 
+- **ERR-01** — An `if` check that doesn't early-return is dead code: the
+  nil still flows into the next `assign`. Make the nil branch return
+  (`{:noreply, socket}`) so nothing below sees nil.
+- **ERR-04** — `Repo.get/2` returns `nil`, NEVER `{:error, changeset}`. A
+  `case` with an `{:error, changeset}` branch contains an unreachable
+  clause; use `with %Schema{} = record <- Repo.get(...)`.
+- LiveView `handle_event` clauses that pattern-match `%{assigns: %{context:
+  %{id: id}}}` crash when the assign is nil — loosen the match, extract with
+  an explicit nil-handling `case`.
+
+### Case over `{:error, %Ecto.Changeset{}}` inside transactions
+
+In a `with ... else` **inside `Repo.transaction`**, an inner function that
+returns `{:error, changeset}` must keep the changeset SHAPE so the `else`
+clause can match it:
+
+```elixir
+with {:ok, user} <- create_user(attrs),
+     {:ok, team} <- create_team(attrs, user) do
+  {:ok, %{user: user, team: team}}
+else
+  {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
+end
 ```
-scope → read systematically → map concepts → write specs progressively
-```
 
-1. **Scope** — read the project manifest (mix.exs / package.json / etc.),
-   README, and file inventory. Identify: public API surface, entry points,
-   layout, dependencies.
-2. **Read systematically** (batch 5-8 independent reads per turn, never one
-   at a time), in layers:
-   - Layer 1 — types & contracts (schemas, config types, public API)
-   - Layer 2 — core logic (context modules, domain logic, mutations, storage)
-   - Layer 3 — UI / rendering (app shell, router, pages, components)
-   - Layer 4 — server / API (routes, WebSocket/realtime, serialization)
-   - Layer 5 — design / theming (design system, presets, CSS variables)
-3. **Map concepts source → target** — build a mapping table
-   (e.g. React Page component → HEEx function component; filesystem → DB
-   records; BroadcastChannel → Phoenix PubSub). This table goes in the
-   overview spec — it's the single most useful artifact for the reader.
-4. **Write specs progressively** in a `specs/` directory, in dependency
-   order: overview → data model → rendering → components → integration
-   (MCP/export) → routes → roadmap. Adapt the list to the codebase.
+A bare `{:error, reason}` else-clause converts a changeset into an opaque
+reason and loses validation messages. Keep `{:error, %Ecto.Changeset{}}`
+matched explicitly, and make every inner function return that shape when it
+fails validation.
 
-### Spec file quality bar
+### Compile walls
 
-Each spec file should include:
+- Run `mix compile --warnings-as-errors` before and after the change — a
+  review target that doesn't pass it is not reviewable as complete.
+- Group related function clauses together and keep them adjacent; scattered
+  clauses of the same function are a readability finding (Credo
+  `SingleFunctionToBlockPipe`, `CondStatements`, `CyclomaticComplexity`).
 
-- **Concrete code examples** in the target language (real Elixir/HEEx/SQL,
-  not pseudocode).
-- **ASCII mockups** for UI components.
-- **Tables** for structured comparisons (props, fields, tools).
-- **Props/attrs listed explicitly** for each component.
-- **Event names** for LiveView/real-time interactions.
-- **SQL DDL** for the data model (actual `CREATE TABLE`, not "a table for
-  users").
+### Concurrency, pagination, sessions
 
-**Bad:** "The system has a canvas component that scales to fit."
-**Good:** real `attr`/`slot` declarations + `~H"""` template.
+- **N+1** — context functions fetching per-item inside template `:for`
+  comprehensions: batch into a single `WHERE ... IN (...)` query returning
+  a map, pre-load before render.
+- **Deterministic pagination** — `OFFSET` pages drift when rows are
+  inserted/deleted mid-paging. Tiebreak on a stable unique key:
+  `ORDER BY id` (or `inserted_at, id`) so the page boundary stays
+  deterministic.
+- **Assigns leakage** — don't assign values into the socket inside an `if`
+  that can be skipped; assign once after all branches resolve.
+- **Auth row-level scope** — every query that reads user-owned rows must
+  scope by the authenticated user's id; a repo shared across callers that
+  forgets the scope filter is a data-leak finding.
 
-### Key architectural patterns
+### i18n coverage
 
-- **Content as declarative data, not code strings.** When porting from a
-  filesystem-embedded content system (JSX/TSX files) to a DB-backed one,
-  store content as structured JSONB. A renderer pattern-matches on `type`;
-  edit operations become JSONB mutations, not AST surgery.
-- **Umbrella for separable concerns.** Prefer an umbrella over a single app:
-  a `core` app with pure logic (Ecto + no Phoenix) that all web apps depend
-  on; separate web apps that never know about each other. MCP tool
-  **implementations** live in core; the MCP **endpoint** lives in the app
-  that needs it. Short, clean app names.
-- **MCP integration as first-class.** Design the MCP server spec as a full
-  API surface — every CRUD operation gets a tool. Include a tool catalog
-  table, example usage sequences, PubSub integration, and an auth model.
-- **Real-time via PubSub.** When porting from a client-only sync model
-  (BroadcastChannel) to server-rendered, replace client-side sync with
-  server-mediated PubSub: mutation → broadcast → LiveView handle_info →
-  re-render.
-- **DESIGN.md as the design-system format.** Use a DESIGN.md file (YAML
-  frontmatter tokens + markdown body) over ad-hoc palette/fonts/radius
-  columns. Tokens are structured + validated, references
-  (`{colors.primary}`) keep single-source, WCAG-checkable, exportable.
-- **Widget-first architecture.** When the target uses configurable widgets,
-  define a `props_schema` per widget type; the inspector reads it and
-  auto-generates editing fields. The schema doubles as validation for MCP
-  tool inputs and documentation.
-- **Concept reformulation — rewrite, don't patch.** If the user pivots the
-  core concept (changing the fundamental unit of construction, removing a
-  document type, changing the rendering model), delete the old specs and
-  start clean. A field addition or size correction is NOT a pivot — patch in
-  place. Recognize replacement pivots (full rewrite) vs additive pivots
-  (keep the widget catalog, rewrite data model + rendering).
+Every user-visible string in HEEx must go through `gettext/1`. Convention
+rule: if the repo uses gettext, hardcoded strings are findings
+(`mix gettext.extract` + CI check). If the repo has no gettext, mark the
+rule n/a — don't flag every literal.
 
-### Pitfalls
+### Automation mapping
 
-- Reading files one at a time — batch 5-8 per turn.
-- Skipping the concept mapping table.
-- Writing pseudocode instead of real code.
-- Forgetting the phased roadmap.
-- Over-specifying trivial parts — focus on architectural decisions, the data
-  model, the rendering pipeline, and integration surfaces.
-- Ignoring the "why" — explain each architectural decision briefly.
-- Assuming all document types share one canvas/page size — add a size field
-  from the start if multiple types exist.
-- Patching when you should rewrite (concept pivot).
+| Pattern | Rule | Tool |
+|---|---|---|
+| Nested `case` / deep if-else | EX-01, EX-02 | Credo `CondStatements`, `CyclomaticComplexity` |
+| Single-transform pipe | EX-05 | Credo `PipeChainStart` |
+| Hardcoded strings | I18N-01 | `mix gettext.extract` + CI diff |
+| FK without index | PF-01 | custom migration linter (every `references/2` must have its `create index`) |
+| Hardcoded URLs | AR-03 | custom Credo check matching `https?://` literals |
+| `Repo.get` without nil handling | ERR-04 | Dialyzer / custom linter |
+
+### Severity honesty
+
+Don't apply low-severity rules as merge blockers — nitpicking erodes review
+trust. Convention-dependent rules (ExMachina factories TS-01, gettext
+I18N-01) are n/a when the repo doesn't use them.
 
 ## Part 2 — Implementation Plan Review
 
-Audit a plan (with its linked todos/specs) BEFORE executing it, to catch
-inconsistencies between the code snippets each todo carries and against the
-authoritative design. Snippets are written independently and drift: the plan
-looks perfect until one todo's code contradicts another's or the decisions.
-
-### When to use
-
-- "Review the plan and todos to see if something is missing or could improve"
-- Before starting a multi-todo plan where each todo carries code snippets
-- After a plan was created by another agent, before approving/executing it
+Audit a plan with its linked todos/specs BEFORE executing. Snippets are
+written independently and drift: the plan looks perfect until one todo's
+code contradicts another's or the authoritative design pages.
 
 ### Guiding principle
 
@@ -168,123 +175,155 @@ snippet NEVER wins over the decision page.
 ### Flow
 
 1. Read project + plan.
-2. Read ALL linked todos.
-3. Read authoritative design pages (decisions, security, performance).
-4. Cross-check snippets by drift class (below).
+2. Read ALL linked todos (full pages, not search excerpts).
+3. Read authoritative design pages.
+4. Cross-check snippets by drift class.
 5. Check plan deliverable vs todos — a referenced decision with no todo
    implementing it = gap.
-6. Check kanban hygiene (one in_progress per person, done only with real
-   verification).
+6. Check kanban hygiene (one `in_progress` per person; `done` only with
+   real verification; new todos in `backlog` when the plan isn't approved).
 7. Present prioritized findings (A: compile/design, B: gaps, C:
    housekeeping). Confirm before applying.
 
-### Snippet drift classes (concrete checklist)
+### Snippet drift classes
 
-For each snippet, compare against the decision and against siblings:
-
-1. **Hashing/auth libraries** — Argon2 vs Bcrypt vs Comeonin drift.
-   Unify on ONE.
-2. **Schema field names vs code** — `role` vs `community_role`,
-   `verification_token` vs `token`. The schema is the truth.
-3. **Status enums conflated** — parent domain status (`active/blocked`) vs
-   child resource status (`active/suspended/deleted/maintenance/draft`)
-   must NOT be conflated.
+1. **Hashing/auth libraries** — Argon2 vs Bcrypt vs Comeonin; unify on ONE.
+2. **Schema field names vs code** — `role` vs `community_role`; schema is
+   the truth.
+3. **Status enums conflated** — parent-domain status (`active/blocked`) vs
+   child-resource status (`active/suspended/deleted/maintenance/draft`).
 4. **ID types** — `binary_id` (UUID string) vs `integer`; `is_integer`
    checks on binary_id fail.
-5. **Duplicate artifacts** — the same table/schema/migration created in 2
-   different todos (with different schemas).
-6. **otp_app / nonexistent apps** — `otp_app` pointing at the umbrella root
-   or a nonexistent app instead of the real owning app.
-7. **Module namespaces** — mixing `AppWeb.*` with a nonexistent shared
-   namespace. Shared plugs live in core (`X.Plugs.*`); each web app has its
-   own namespace.
-8. **Verification prerequisites** — VERIFY steps depending on something no
-   todo creates (e.g. `mix release` without a `releases:` section in
-   mix.exs).
+5. **Duplicate artifacts** — same table/schema/migration created in 2
+   todos with different schemas.
+6. **otp_app / nonexistent apps** — pointing at the umbrella root or a
+   nonexistent app instead of the real owning app.
+7. **Module namespaces** — mixing web-app namespaces with a nonexistent
+   shared one; shared plugs live in core (`X.Plugs.*`).
+8. **Verification prerequisites** — a VERIFY step depending on something no
+   todo creates (`mix release` without a `releases:` section).
 9. **Inconsistent thresholds/flags** — rate limits, session limits, TTLs
-   differing between todos, and between todo and concept.
+   differing between todos and between todo and concept.
 10. **Env-sensitive flags** — `secure: true` cookies break localhost dev;
-    must be conditional on env.
+    must be `secure: config_env() == :prod`.
 
 ### Gaps: plan deliverable vs todos
 
-The plan's deliverable lists what it produces. If a decision is REFERENCED
-(gotcha, deliverable) but no todo implements it → gap. Classics: telemetry,
-email/confirmation/password reset, session limits, `bin/migrate`, prod seeds.
-Decide: new todo, or merge into an existing one.
+Decision REFERENCED (in deliverable/gotcha) but no todo implements it →
+gap. Classics: telemetry, email/confirmation/password reset, session
+limits, `bin/migrate`, prod seeds. Decide: new todo, or merge into an
+existing one.
 
-### Pitfalls
+## Part 3 — Redundancy Audit
 
-- Answering from search excerpts — read full pages first.
-- Trusting a todo's snippet over the decision page — snippets drift; the
-  decision wins.
-- Reconstructing bodies with a footer that isn't part of the body.
-- Applying corrections without verifying (re-read each edited page, confirm
-  mermaid preserved and content correct).
+Find duplicated and reusable Elixir/Phoenix code. Read-only; pairs with a
+follow-up consolidation plan.
 
-## Part 3 — Code Redundancy Audit
+**Why not clone detectors:** `jscpd` has no Elixir parser — against `.ex`
+files it reports "No duplicates found" with `Files analyzed: 0`. That's a
+false negative, not a clean codebase. Manual pattern-hunting with grep +
+diff is the effective method (details in `references/redundancy-audit.md`).
 
-Find duplicated and reusable code in an Elixir/Phoenix codebase. Works
-read-only; pairs well with a follow-up consolidation plan.
+Workflow: size the codebase (same-sized sibling files = candidates) → diff
+siblings → grep copy-paste fingerprints (`defp format_errors`,
+`traverse_errors`, `get_or_create`, `on_conflict`, try/rescue wrappers) →
+check for a **partially-adopted shared module** (the finding is "finish the
+adoption", not "invent an abstraction") → verify dead code repo-wide before
+claiming it.
 
-### Why not clone detectors
+Report per finding: What · Where (file:line per copy) · Evidence · Suggestion ·
+Impact (high/medium/low + LOC saved). Quick-wins table at the end. Only
+verified file:line findings.
 
-`jscpd` has NO Elixir parser — running it against `.ex` files silently
-analyzes 0 files and reports "No duplicates found" with `Files analyzed: 0`
-in the stats table. That is a false negative, not a clean codebase. The
-effective method is manual pattern-hunting with grep + diff.
+## Part 4 — Architecture Specs & Audit
 
-### Workflow
+### Specs (reimplementation / porting)
 
-1. **Size the codebase**: count `.ex` files and lines, list directory
-   distribution (`find lib -name "*.ex" | sed 's|/[^/]*$||' | sort | uniq -c
-   | sort -rn`). Directories with many same-sized sibling files (LiveViews
-   per type, controllers per resource, schemas per table) are prime
-   duplication candidates.
-2. **Spot structurally similar siblings**: files of near-identical line
-   count in the same directory. Diff two of them
-   (`diff <(sed -n '110,230p' a.ex) <(sed -n '110,230p' b.ex)`) — few
-   differing lines = clone.
-3. **Grep for copy-paste fingerprints** — private helpers and idiomatic
-   blocks that tend to travel together: `defp format_errors`,
-   `traverse_errors`, `defp titleize`, `get_or_create`, `get_or_insert`,
-   `def run_scheduled`, `on_conflict`, try/rescue wrappers, `if context do
-   ... else 404` guards.
-4. **Check for a partially-adopted shared module**: often the codebase
-   ALREADY started consolidating (a shared helper, a `__using__` macro) and
-   only some callers adopted it. `grep -c` per caller reveals adopters vs
-   laggards. The finding is then "finish the adoption", not "invent an
-   abstraction".
-5. **Verify dead code before claiming it**: a public `def` with no callers
-   needs a repo-wide grep of the function name (all arities) across `lib/`,
-   `test/`, and templates before being declared unused.
+Workflow: `scope → read systematically → map concepts → write specs
+progressively` (full method in `references/architecture-spec-audit.md`).
 
-### Report format
+- Read in layers (types/contracts → core logic → UI → server/API →
+  design), batching 5-8 independent reads per turn.
+- The source→target concept mapping table goes in the overview spec — it's
+  the single most useful artifact.
+- Write `specs/` in dependency order: overview → data model → rendering →
+  components → integration → routes → roadmap.
+- Quality bar: real Elixir/HEEx/SQL (not pseudocode), ASCII mockups, SQL
+  DDL, explicit props/attrs.
+- Replacement pivot = delete specs and rewrite; additive pivot = keep the
+  widget catalog, rewrite data model + rendering. Field additions patch in
+  place.
 
-Per finding: **What** (one line), **Where** (file:line per copy),
-**Evidence** (diff result or identical snippet), **Suggestion** (extract to
-X / delegate to existing Y), **Impact** (high/medium/low + estimated LOC
-saved). End with a quick-wins table ordered by impact/effort. Only verified
-file:line findings — no guesses.
+### Audit (bug-finding, not porting)
 
-### Pitfalls
+Read systematically → establish baseline (`mix compile --warnings-as-errors
+&& mix test` — a failing baseline makes "fix the build" task #1) → categorize
+findings → phased plan. Scan everything in
+`references/phoenix-audit-checklist.md`: dead/duplicate modules, `raw()`
+XSS, pattern-match crashes on nil, N+1, missing pagination, no caching,
+missing debounce, unused parameters, inline JS.
 
-- **Prefer "finish existing adoption" over new abstractions** — introducing
-  a second shared module next to a half-adopted one makes the mess worse.
-- **Count adoption, not just duplication** — `grep -c` per sibling file
-  tells you whether the pattern is "never extracted" or "half the callers
-  still copy".
-- **Umbrella apps**: run per-app (`apps/*/lib`), not just the root `lib/`.
-- Don't propose extracting a helper used only twice unless a third consumer
-  is obviously coming.
+**DRY dimension is mandatory** — users expect a DRY/modularization phase
+even when they don't ask. Before reporting duplicated functions, check
+`my_app_web.ex` auto-imports: a function called in 11 files may be defined
+once and auto-imported (that's NOT duplication). Only report duplication
+when the same `defp` is *defined* in 2+ files.
+
+## Adversarial review posture
+
+- **Who writes does not self-approve** — the author's plan/code gets the
+  same adversarial pass as anyone else's.
+- **Blocking criteria** (any = reject/hold): secrets or credentials in
+  code/config, debug leftovers (`IO.inspect`, `dbg`, hardcoded test
+  creds), migration/structure.sql drift (schema changed but
+  `priv/repo/structure.sql` or the migration chain not updated), missing
+  module references (code calling modules/fields that don't exist in the
+  diff).
+- **Validate-and-extend before fixing** — when a buggy function must be
+  fixed, first reproduce the bug yourself, then grep the consumers of the
+  function (all arities, `lib/` + `test/` + templates) so the fix
+  doesn't break callers that depend on current behavior.
+- **Read-before-conclude** — never answer from search excerpts; read the
+  full page/file first.
+- **Blast-radius enumeration** — before proposing a change, enumerate
+  every consumer and every test that touches the changed surface; the blast
+  radius of a fix is part of the review finding.
+
+## Verify
+
+Gate commands (run from the repo root of the codebase under review — not
+this skill's own staging):
+
+```bash
+# 1. Review target must compile warning-free
+mix compile --warnings-as-errors
+
+# 2. Test suite green (no deleted/renamed specs during refactors)
+mix test
+
+# 3. No secrets / debug leftovers in the diff
+git diff | grep -nE 'password|secret|api_key|dbg\(|IO\.inspect' || true
+
+# 4. FK indexes present for every references/2 in new migrations
+grep -rn 'references(' priv/repo/migrations/ | wc -l
+grep -rn 'create index' priv/repo/migrations/ | wc -l
+
+# 5. Redundancy audit sizing
+find lib -name '*.ex' | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn
+```
+
+Expected: compile and tests exit 0; no secrets/leftovers; every
+`references/2` has a matching `create index` (counts equal); directory
+distribution reveals same-sized sibling clusters.
 
 ## References
 
-- `references/architecture-specs/` — worked example (concept mapping table,
-  spec inventory, reading order) + Phoenix audit checklist (recurring
-  anti-patterns: N+1 in templates, `raw()` XSS, pattern-match crashes on nil
-  context, duplicate utility code, missing pagination/caching).
-- `references/implementation-plan-review/` — worked plan-review example as a
-  concrete checklist of each drift class.
-- `references/orig-*.md` — the absorbed originals (architecture-specs,
-  implementation-plan-review) for full depth.
+- `references/diff-review-idiom-rules.md` — full rulebook (EX/TS/ERR/PF/AR/I18N/LG/NM) with anti-pattern/correct code pairs and the automation table. Load for every diff review.
+- `references/adversarial-review-protocol.md` — who-self-approves, blocking criteria, validate-and-extend, blast-radius enumeration. Load when reviewing anything that will be executed.
+- `references/plan-review.md` — plan/todo audit method, drift classes with code signatures, gaps, kanban hygiene. Load before executing any multi-todo plan.
+- `references/plan-review-example.md` — worked plan review (11 drift findings + 5 gaps) as a concrete checklist. Load to see each drift class in the wild.
+- `references/bulk-edit-safety.md` — safe multi-page bulk edits after review fixes: anchor-based edits, exact-match rules, hash verification, mermaid preservation. Load when applying plan corrections at scale.
+- `references/architecture-spec-audit.md` — spec production workflow (layers, mapping table, progressive writing, quality bar, pivots) and umbrella guidance. Load for reimplementation/porting requests.
+- `references/redundancy-audit.md` — grep+diff duplication hunt, adoption counting, dead-code verification. Load when asked to find reusable/duplicated code.
+- `references/phoenix-audit-checklist.md` — recurring Phoenix/LiveView anti-patterns with grep commands and fix shapes. Load when auditing a running app for bugs.
+- `references/review-fix-recommendations.md` — how to convert review findings into verifiable fixes: prioritized phases, exact file:line, verification commands. Load when writing the fix plan.
