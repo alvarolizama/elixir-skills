@@ -128,6 +128,35 @@ git status --short        # verify clean
 - Irreversible: flag what's at stake before executing and confirm scope
   (the user may mean several sibling repos, not just cwd).
 
+## One checkout, two sessions (co-writer in the SAME worktree)
+
+Parallel agents in *separate* worktrees are the case above; two sessions in
+the SAME checkout are worse: both write the same files, the index is shared,
+and either side's `reset`/`commit` moves the ground under the other. Treat
+the index as a contested resource.
+
+- **`git checkout-index -f -- <paths>` is NOT "unstage".** It writes the
+  INDEX into the WORKING TREE, silently reverting both your unstaged edits
+  and the co-writer's uncommitted hunks in those files. To unstage: `git
+  reset -- <paths>` (index only, working tree untouched). Recovery from that
+  mistake needs a snapshot of their hunks you probably do not have.
+- **Stage forensic hunks, then prove provenance by hash.** Classify every
+  hunk of a shared file: yours iff it carries one of your markers AND none of
+  theirs; build a patch with just those hunks and `git apply --cached`, then
+  assert the staged blob equals the tree you actually verified
+  (`git rev-parse :<path>` == `git hash-object <verified-file>`).
+- **Verify in a `git worktree` detached at HEAD, built FROM THE INDEX.**
+  `git worktree add --detach /tmp/<name> HEAD`, symlink `deps` and
+  `assets/node_modules`, clone `_build` (`cp -Rc`), write each staged path
+  with `git show :<path>`, then compile/format/assets/test there: that tree
+  IS the commit you are about to make, and the primary tree (broken by the
+  co-writer at any moment) stays off the critical path.
+- **Their commit can land between your staging and your commit**, clearing
+  the index (`git commit` then says "no changes added"). Re-read `git
+  status`, re-stage, re-verify on the NEW base, re-commit.
+- **Say it out loud**: which hunks ride in your commit, which of their files
+  you had to touch, and any WIP you could not recover verbatim.
+
 ## Verification
 
 - `git log --oneline -5`: atomic commits, conventional messages.

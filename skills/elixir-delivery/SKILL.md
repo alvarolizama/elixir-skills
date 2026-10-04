@@ -84,6 +84,18 @@ Reference: `precommit-gates.md`.
   findings. Real new findings block the commit.
 - **Format idempotency:** `mix format`, then `git status --porcelain | wc -l`
   unchanged from before = tree was already formatted.
+- **A foreign writer in the tree invalidates the aggregate gates.** `mix
+  precommit` runs a global `mix format`, which rewrites whatever another session
+  has in flight — its WIP, not yours. Run the pieces individually and format
+  ONLY your files (`mix format <path>...`); `mix format --check-formatted`
+  (writes nothing) shows the rest of the tree's state. Attribute failures with
+  evidence before reporting them as yours: `git show HEAD:<file> | grep -c
+  '<the string the failure names>'` — a suite that only fails on the other
+  writer's in-flight strings is green for your change. A co-writer's commit
+  can also land mid-staging and clear the index, and NEVER
+  `git checkout-index -f` to unstage — it writes the index into the working
+  tree and eats their hunks (`git reset -- <paths>` is the unstage that
+  leaves the working tree alone). See `git-hygiene-and-hunks.md`.
 - **Compile strict:** `mix compile --warnings-as-errors` after every fix, not
   once per wave — each fix is new code and the previous green run expires.
 - **Full suite in background** with output to a file. Piping through `tail`
