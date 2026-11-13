@@ -13,10 +13,11 @@ sibling pickers works while the others silently don't.
    changed input, keyed by its `name` attribute
    (`serializeForm(form, opts, [input.name])`). An input WITHOUT a name
    ships an empty value → every keystroke resets the filter to `""` →
-   dropdown shuts. Legacy code used `phx-keyup` PRECISELY because it
-   sends `%{"value"}` regardless of name — treat pre-existing keyup as
-   load-bearing until proven otherwise; migrating to `phx-change`
-   requires naming the inputs in the same commit.
+   dropdown shuts. `phx-keyup` is NOT a supported filter mechanism here:
+   the docs do not offer keyup/keydown value bindings on inputs — their
+   payload carries the key and meta, never the input value — so it cannot
+   feed the query. Filter with a named `phx-change` (+ `phx-debounce`);
+   when migrating legacy keyup code, name the inputs in the same commit.
 2. **Escape reopen loop.** With keyup filters, Escape closes but
    RELEASING the key fires keyup → `q != ""` → reopens. Impossible once
    filtering runs on change. Never mix keyup-openers with keyboard
@@ -113,9 +114,11 @@ After editing, verify mechanically — green suites will NOT catch a
 skipped sibling when no test drives that sibling's flow:
 
 ```bash
-grep -c 'phx-click-away="close_pickers"' lib/**/*_live.ex  # == wrapper count (all variants)
-grep -c 'phx-focus="open_picker"' ...                      # == searcher count (all variants)
-grep -c 'phx-keyup="' ...                                  # == 0, no half-migrated stragglers
+# `lib/**` is NOT a recursive glob in bash (no globstar in macOS bash 3.2) —
+# grep recursively instead:
+grep -rn --include='*_live.ex' 'phx-click-away="close_pickers"' lib/ | wc -l  # == wrapper count (all variants)
+grep -rn --include='*_live.ex' 'phx-focus="open_picker"' lib/ | wc -l         # == searcher count (all variants)
+grep -rn --include='*_live.ex' 'phx-keyup="' lib/ | wc -l                     # == 0, no half-migrated stragglers
 ```
 
 Delete orphaned handlers only AFTER grepping templates for their event

@@ -4,7 +4,7 @@ description: "Use when reviewing Elixir/Phoenix code, plans, or architecture: PR
 version: 1.0.0
 author: Álvaro Lizama
 license: MIT
-platforms: [macos, linux]
+platforms: [linux, macos]
 metadata:
   hermes:
     tags: [code-review, idiom-rules, plan-review, redundancy-audit, architecture-specs, audit, nil-safety]
@@ -62,9 +62,12 @@ flowchart TD
 ## Part 1 — Diff & Code Review
 
 Review Elixir/Phoenix code (PRs, diffs, agent output, self-review before
-commit) against the **idiom rulebook** in `references/diff-review-idiom-rules.md`.
+commit) against the **rulebook** in `references/` — three files, one per
+rule family: `diff-review-style-rules.md` (EX), `diff-review-correctness-rules.md`
+(TS, ERR), `diff-review-system-rules.md` (PF, AR, I18N, LG, NM).
 Every rule has a severity, a why, an anti-pattern, and the correct form;
-rule IDs are stable and citable (`EX-01`, `ERR-04`, ...).
+rule IDs are stable across the whole rulebook and citable (`EX-01`,
+`ERR-04`, ...).
 
 ### Workflow
 
@@ -72,8 +75,8 @@ rule IDs are stable and citable (`EX-01`, `ERR-04`, ...).
    review. Never review from memory or someone else's summary; a finding
    needs a real `file:line`.
 2. **Scan against the rulebook** — style/idioms (EX-01..06), tests
-   (TS-01..05), error handling & nil safety (ERR-01..05), performance & DB
-   (PF-01..04), architecture (AR-01..03), i18n/correctness/naming
+   (TS-01..05), error handling & nil safety (ERR-01..06), performance & DB
+   (PF-01..06), architecture (AR-01..03), i18n/correctness/naming
    (I18N, LG, NM).
 3. **Classify severity**: high = merge blocker (bugs, leaks, broken
    contracts, data-loss risk); medium = should fix (readability,
@@ -290,7 +293,7 @@ when the same `defp` is *defined* in 2+ files.
   every consumer and every test that touches the changed surface; the blast
   radius of a fix is part of the review finding.
 
-## Verify
+## VERIFY
 
 Gate commands (run from the repo root of the codebase under review — not
 this skill's own staging):
@@ -303,27 +306,44 @@ mix compile --warnings-as-errors
 mix test
 
 # 3. No secrets / debug leftovers in the diff
-git diff | grep -nE 'password|secret|api_key|dbg\(|IO\.inspect' || true
+#    `git diff` alone misses STAGED changes — `git diff HEAD` covers
+#    staged + unstaged. `git diff --cached` is the exact pre-commit
+#    frontier when only the index will be committed.
+git diff HEAD | grep -nE 'password|secret|api_key|dbg\(|IO\.inspect' || true
 
-# 4. FK indexes present for every references/2 in new migrations
-grep -rn 'references(' priv/repo/migrations/ | wc -l
-grep -rn 'create index' priv/repo/migrations/ | wc -l
+# 4. FK indexes present — per constraint, not by count: every FK must have
+#    an index whose LEADING columns are the FK columns, in order; partial
+#    and invalid indexes do not cover every FK lookup
+psql "$DATABASE_URL" -c "
+SELECT c.conrelid::regclass AS tbl, c.conname
+FROM pg_constraint c
+WHERE c.contype = 'f'
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_index i
+    WHERE i.indrelid = c.conrelid
+      AND i.indisvalid AND i.indpred IS NULL
+      AND (i.indkey::int2[])[0:cardinality(c.conkey)-1] = c.conkey);"
+# expect: 0 rows
 
 # 5. Redundancy audit sizing
 find lib -name '*.ex' | sed 's|/[^/]*$||' | sort | uniq -c | sort -rn
 ```
 
-Expected: compile and tests exit 0; no secrets/leftovers; every
-`references/2` has a matching `create index` (counts equal); directory
-distribution reveals same-sized sibling clusters.
+Expected: compile and tests exit 0; no secrets/leftovers in
+`git diff HEAD`; the FK-index query returns zero rows (counting
+`references/` vs `create index` lines does NOT prove matching per
+column); directory distribution reveals same-sized sibling clusters.
 
 ## References
 
-- `references/diff-review-idiom-rules.md` — full rulebook (EX/TS/ERR/PF/AR/I18N/LG/NM) with anti-pattern/correct code pairs and the automation table. Load for every diff review.
-- `references/adversarial-review-protocol.md` — who-self-approves, blocking criteria, validate-and-extend, blast-radius enumeration. Load when reviewing anything that will be executed.
+Diff-review rulebook — three files, one per rule family; IDs are stable across all of them, so findings stay citable as `RULE-ID (severity) + file:line + one-line why + the fix`:
+
+- `references/diff-review-style-rules.md` — EX-01..06: nested `case`, `cond`, assign batching, `handle_event` extraction, single-transform pipes, duplicated `:if` conditions. Load for every diff review.
+- `references/diff-review-correctness-rules.md` — TS-01..05 (factories, spec retention, temp cleanup, testable extraction) and ERR-01..06 (nil flow through `if`, `Enum.find`, `Repo.get` nil, `get_in` + `match?`, changeset shape inside transactions). Load for every diff review.
+- `references/diff-review-system-rules.md` — PF-01..06 (FK indexes, composite column order, duplicate repos, `update_all`, N+1, pagination), AR-01..03, I18N-01..02, LG-01..02 (TLS default, cache expiry), NM-01, the automation table and pitfalls. Load for migration/perf/config surfaces.
+- `references/adversarial-review-protocol.md` — who-self-approves, blocking criteria, validate-and-extend, blast-radius enumeration, and turning findings into a verifiable fix plan. Load when reviewing anything that will be executed. (The delivery-side pre-commit dispatch gate built on this protocol is `skills/elixir-delivery/references/adversarial-review-gate.md`.)
 - `references/plan-review.md` — plan/todo audit method, drift classes with code signatures, gaps, kanban hygiene. Load before executing any multi-todo plan.
 - `references/bulk-edit-safety.md` — safe multi-page bulk edits after review fixes: anchor-based edits, exact-match rules, hash verification, mermaid preservation. Load when applying plan corrections at scale.
 - `references/architecture-spec-audit.md` — spec production workflow (layers, mapping table, progressive writing, quality bar, pivots) and umbrella guidance. Load for reimplementation/porting requests.
 - `references/redundancy-audit.md` — grep+diff duplication hunt, adoption counting, dead-code verification. Load when asked to find reusable/duplicated code.
 - `references/phoenix-audit-checklist.md` — recurring Phoenix/LiveView anti-patterns with grep commands and fix shapes. Load when auditing a running app for bugs.
-- `references/review-fix-recommendations.md` — how to convert review findings into verifiable fixes: prioritized phases, exact file:line, verification commands. Load when writing the fix plan.

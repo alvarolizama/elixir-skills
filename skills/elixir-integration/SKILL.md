@@ -203,7 +203,11 @@ grep -rn "configure_session(conn, renew: true)" lib/ | wc -l  # one per identity
 
 # Health endpoint answers without auth (server running)
 curl -s -w "\nHTTP %{http_code}\n" http://localhost:4999/health
-# expect {"status":"ok",...} and HTTP 200
+# expect {"status":"ok","db":"up"} and HTTP 200
+
+# Degraded path is honest too: with the DB unreachable (DB stopped or host
+# pointed at a dead port), the same endpoint must return HTTP 503 and
+# {"status":"degraded","db":"down"} — never 503 with "db":"up".
 
 # MCP wire handshake (server running on :4000)
 curl -i -X POST http://localhost:4000/api/mcp \

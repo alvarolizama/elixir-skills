@@ -4,7 +4,7 @@ description: "Use when testing Elixir/Phoenix code with ExUnit or pure-React SSR
 version: 1.0.0
 author: Álvaro Lizama
 license: MIT
-platforms: [linux, macos, windows]
+platforms: [linux, macos]
 metadata:
   hermes:
     tags: [elixir, exunit, testing, phoenix, flaky-tests, ecto, async, liveviewtest, react, vitest, ssr]
@@ -23,7 +23,7 @@ hygiene) and headless pure-React widget testing via `renderToStaticMarkup`.
 flowchart TD
     A[Testing task] --> B{What kind of failure or work?}
     B -->|New pure module + its ExUnit test| C[Pure module workflow]
-    B -->|Reduce/case not matching, dedup bug, weird warnings| P[Six foot-guns]
+    B -->|Reduce/case not matching, dedup bug, weird warnings| P[Seven foot-guns]
     B -->|async: true count/aggregate flakes under load| F[Triage 4 classes]
     B -->|LiveView test red: form, select, flash, html =~| L[LiveViewTest traps]
     B -->|OwnershipError / fails after ecto.drop / fails solo| S[Sandbox & seed hygiene]
@@ -73,7 +73,7 @@ mix test                            # full suite — no regressions
    sandbox — clean up FK-safe (children before parents), prefer get-or-create
    so reruns are idempotent.
 
-## The six foot-guns
+## The seven foot-guns
 
 | # | Symptom | Mechanism | Fix |
 |---|---------|-----------|-----|
@@ -98,8 +98,10 @@ Full mechanisms and code: load `references/functional-purity-patterns.md`.
    context. (See `references/sandbox-and-seed-dependency.md`.)
 3. **Zombie tasks / async-pool races**: `DBConnection.OwnershipError` ("mode
    reverts to :manual") or `client #PID exited`; failing test MIGRATES across
-   files per seed → force `schedule_async: false` in `test_helper.exs`, flip
-   DB-touching async modules to `async: false`.
+   files per seed → disable the project's background-task scheduling flag
+   for the test env in `test_helper.exs` (app config such as
+   `schedule_async: false` — a per-project knob, NOT an ExUnit option),
+   and flip DB-touching async modules to `async: false`.
 4. **Zero-vector NaN sort trap** (pgvector): a zero embedding sorts last, so the
    asserted row falls out of a `LIMIT` window → fresh scoping context, not a
    weaker assertion.
@@ -167,9 +169,11 @@ Full symptom→fix recipes: `references/liveviewtest-pitfalls.md` and
   shared fixtures **without a create-fallback**:
   `MyApp.Content.get_context_by_slug("personal") || elem(MyApp.Content.create_context(%{...}), 1)`.
 - App-spawned `Task.Supervisor` tasks that touch the DB outlive the test and
-  tear down the shared sandbox connection → set `schedule_async: false`
-  suite-wide in `test_helper.exs`; grep every per-test `Application.put_env`
-  block for the same key.
+  tear down the shared sandbox connection → disable background-task
+  scheduling for the test env via app config in `test_helper.exs` — the
+  flag is PROJECT-SPECIFIC (e.g. `schedule_async: false` under the app's
+  own config key; not an ExUnit option). Grep every per-test
+  `Application.put_env` block for the same key.
 - `async: true` DataCase/ConnCase modules race sync shared-mode windows — the
   sandbox docs themselves say shared-mode tests must not be async. DB-touching
   → `async: false`; imports-only → `use ExUnit.Case, async: true`.
@@ -230,12 +234,8 @@ mix test                                    # full suite, no new regressions
 npx tsc --noEmit 2>&1 | grep -c "<your-new-files>"   # expect 0
 npx vitest run                                        # exit 0
 
-# Skill-integrity gates (run from the elixir-skills repo root)
-# The four gates are defined in .riel/briefs/HOUSE.md — run them verbatim
-# from there; do NOT inline the brand-scan regex here (it self-hits).
-find .riel/build/elixir-testing -name '*.md' | wc -l    # SKILL.md + 5–10 references
-grep -c 'flowchart' .riel/build/elixir-testing/SKILL.md # ≥ 1
-head -12 .riel/build/elixir-testing/SKILL.md            # frontmatter visible
+# Skill-integrity gate (self-contained; run from the elixir-skills repo root)
+python3 scripts/validate.py
 ```
 
 ## References

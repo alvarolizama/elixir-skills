@@ -4,6 +4,7 @@ description: "Use when bootstrapping Elixir/Phoenix umbrella apps: scaffold, env
 version: 1.0.0
 author: Álvaro Lizama
 license: MIT
+platforms: [linux, macos]
 metadata:
   hermes:
     tags: [elixir, phoenix, umbrella, scaffold, setup, bootstrap, mise, postgres, hex, multi-tenant, saas]
@@ -140,6 +141,32 @@ gitignore pattern.
   list` empty → not authed; `Failed to fetch record for hexpm:<org>/<pkg>` →
   auth or org membership missing.
 - `mix phx.gen.secret` prints NOTHING on success (exit 0) — don't re-run.
+
+### Auditing env vars before touching `.env` / `.env.example` / README
+
+- **`System.get_env` / `System.fetch_env` / `System.fetch_env!` are the only
+  source of truth.** Enumerate what the code actually reads before cleaning or
+  documenting env vars:
+  `grep -rEo 'System[.](get|fetch)_env!?[(]"[A-Z0-9_]+"' --include=*.ex --include=*.exs lib config priv scripts`
+  plus the shell/Docker files that consume env (external consumers read the
+  same keys), then diff against the keys present in `.env` and
+  `.env.example`. A `fetch_env!/1` var is required at boot — flagging one as
+  dead and deleting it breaks the app at startup.
+- A local `.env` accumulates **dead keys** (renamed vars, config moved into the
+  DB/UI, dropped features) while `.env.example` stays clean. Per-name repo-wide
+  grep is the evidence: a hit only in `.env` (and never in code) means the key
+  is safe to delete. Beware silent renames — a script reading `MYAPP_USER` never
+  sees `MYAPP_USERNAME` and silently falls back to its hardcoded default.
+- An env var that controls a **database row or a UI setting** is a bug, not
+  config: move it out, then delete its docs (`.env.example`, README table) AND
+  its code path, and pin the removal with a test
+  (`Code.ensure_loaded!(Mod)` then `refute function_exported?(Mod, :seed, 0)`
+  — without `ensure_loaded!/1` the refute passes vacuously: it returns false
+  for any module that was never loaded).
+- **Never hand-edit a secrets `.env`.** Script it: back the file up OUTSIDE the
+  repo (a `.env.bak` inside is not gitignored → secrets get committed), rewrite,
+  then `assert` each surviving key keeps its value byte-for-byte and print only
+  key lengths — never the values, never into a transcript.
 - Full bootstrap + verification sequence:
   `references/umbrella-bootstrap.md`.
 
@@ -266,7 +293,7 @@ curl -sf http://localhost:4000 | head -20          # 200 home
 MIX_ENV=test mix run -e 'IO.puts(Application.get_env(:core, Core.Repo)[:database])'
 # → my_app_test (proves test config wins over runtime.exs defaults)
 psql postgres -c "SELECT usename FROM pg_user;"    # role exists
-hex user whoami && mix hex.organization list       # auth present before publish
+mix hex.user whoami && mix hex.organization list   # auth present before publish
 ```
 
 Expected shapes: `Generated <app> app` / `Finished in ... : N tests, 0

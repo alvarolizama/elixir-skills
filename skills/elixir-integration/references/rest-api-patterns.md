@@ -53,13 +53,27 @@ plug), DB probe:
 ```elixir
 def health(conn, _) do
   case Repo.query("SELECT 1") do
-    {:ok, _} -> json(conn, %{status: "ok", db: "ok"})
-    {:error, _} -> conn |> put_status(:service_unavailable) |> json(%{status: "degraded", db: "up"})
+    {:ok, _}  -> json(conn, %{status: "ok", db: "up"})
+    {:error, _} -> conn |> put_status(:service_unavailable) |> json(%{status: "degraded", db: "down"})
   end
 end
 ```
 
-**Verification.** `curl -s -w "%{http_code}\n" http://localhost:4000/health` → 200, no auth header.
+A 503 that still reports `db: "up"` lies to the load balancer and to the
+on-call engineer: the probe failed, so the DB is DOWN as far as this node can
+tell. `status: "degraded"` + `db: "down"` is the honest contract.
+
+**Verification.** Two curls, both required:
+
+```bash
+# healthy path
+curl -s -w "\n%{http_code}\n" http://localhost:4000/health
+# expect {"status":"ok","db":"up"} and HTTP 200
+
+# degraded path: stop the DB (or point the runtime host at a dead port), then
+curl -s -w "\n%{http_code}\n" http://localhost:4000/health
+# expect {"status":"degraded","db":"down"} and HTTP 503 — never 503 + "db":"up"
+```
 
 ## Token auth plug
 
@@ -141,8 +155,10 @@ storage dir — a `../` traversal must resolve to nothing.
 ```bash
 mix compile --warnings-as-errors && mix test
 
-# health endpoint public
+# health endpoint public AND honest about the degraded case
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4000/health   # 200
+# with the DB unreachable, same endpoint:
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:4000/health   # 503, body has "db":"down"
 
 # no plaintext token comparison anywhere
 grep -rn "== token\|token ==" lib/ | wc -l                              # expect 0

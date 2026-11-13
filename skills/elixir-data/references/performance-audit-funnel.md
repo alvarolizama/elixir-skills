@@ -87,9 +87,9 @@ For every hot query, compare its `ORDER BY`/`WHERE`/`group_by` against actual
 migrations (`grep -rn 'create index\|CREATE INDEX' priv/repo/migrations/`).
 Composite indexes must match the query shape (key columns + sort directions).
 
-Partitioned tables: indexes must be created on the parent (propagates);
-`CONCURRENTLY` is NOT supported on partitioned parents; partial indexes must be
-added per partition. See `references/partition-maintenance.md`.
+Partitioned tables: indexes must be created on the parent (propagates —
+partial indexes included); `CONCURRENTLY` is NOT supported on partitioned
+parents. See `references/partition-maintenance.md`.
 
 ### 8. Check partition lifecycle
 

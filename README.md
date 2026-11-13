@@ -70,6 +70,11 @@ flowchart TD
 elixir-skills/
 ├── SKILL.md              ← router: core rules + modern-stack pins + DAG routing + Quick Nav
 ├── README.md
+├── LICENSE               ← MIT
+├── assets/
+│   └── elixir-skills-header.png
+├── scripts/
+│   └── validate.py       ← structural validator (Python stdlib only)
 └── skills/
     ├── elixir-setup/         SKILL.md (meta/DAG) + references/
     ├── elixir-data/          SKILL.md (meta/DAG) + references/
@@ -236,6 +241,20 @@ Rules for contributions:
 - **References are pattern documents, not session logs**: symptom → mechanism
   → fix → verification. 60–250 lines each; keep 5–10 per category.
 
+## Validate
+
+Structural hygiene (frontmatter keys, DAG presence, exact `## VERIFY` heading,
+reference index completeness/counts/lengths, relative Markdown link
+resolution) is enforced by a stdlib-only Python validator. Run it from the
+repo root before committing:
+
+```bash
+python3 scripts/validate.py
+```
+
+It prints one line per failure (`file:line — problem`) and exits non-zero when
+anything is broken, so it can gate commits or CI.
+
 ## License
 
-MIT.
+MIT — see [`LICENSE`](LICENSE).

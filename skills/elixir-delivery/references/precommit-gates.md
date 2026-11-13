@@ -15,12 +15,14 @@ compile → deps.unlock → format → deps.audit → sobelow --exit medium → 
 ```
 
 - It dies at `sobelow --exit medium` whenever preexisting findings exist —
-  format and test never run through the alias in that repo state.
+  TEST never runs through the alias in that repo state. FORMAT sits BEFORE
+  sobelow in the order and may already have run (and rewritten files) by
+  the time sobelow dies — never assume the earlier gates didn't execute.
 - `mix format` running inside the alias does not dirty the tree — but verify
   with `git status --porcelain` afterwards; do not assume.
-- When the alias dies at sobelow, run the remaining gates directly instead of
-  assuming they ran: `mix compile --warnings-as-errors`, `mix format`,
-  `mix test`.
+- When the alias dies at sobelow, run the later gates directly instead of
+  assuming they ran: `mix compile --warnings-as-errors`, `mix format
+  --check-formatted`, `mix test`.
 
 ## Sobelow disposition 1 — constant false positive (fix once)
 
@@ -89,8 +91,17 @@ encodes parameters before the cast runs.
 ## Format idempotency
 
 ```bash
+mix format --check-formatted    # writes nothing; exit 0 = already formatted
+```
+
+To prove `mix format` itself changes nothing, compare hashes — a count of
+`git status --porcelain` lines can stay equal while files are rewritten:
+
+```bash
+find lib test -name '*.ex' -o -name '*.exs' | sort | xargs shasum > /tmp/fmt_before.sha
 mix format
-git status --porcelain | wc -l    # unchanged from before the format = already formatted
+find lib test -name '*.ex' -o -name '*.exs' | sort | xargs shasum > /tmp/fmt_after.sha
+diff /tmp/fmt_before.sha /tmp/fmt_after.sha   # empty = idempotent
 ```
 
 ## Compile strict

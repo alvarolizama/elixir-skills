@@ -156,24 +156,28 @@ GET renders; POST 403s with NO controller log line (the request dies in the
 
 ## Ecto/Postgres TLS
 
-`verify_peer` against the system CA bundle breaks self-signed/private-CA
-Postgres: `bad_certificate selfsigned_peer` → boot loop; the misleading
-`failed to create db for MyApp.Repo: "killed"` actually means the TLS
-connect died — the DB may already exist. Default to encrypted-but-unverified,
-strict opt-in:
+Production default is `verify_peer` — encryption without peer verification does not stop
+a MITM, so `verify_none` in prod contradicts the review rule that bans unverified TLS.
+Self-signed/private-CA Postgres (common with managed providers) breaks the system CA
+bundle: `bad_certificate selfsigned_peer` → boot loop; the misleading `failed to create
+db for MyApp.Repo: "killed"` actually means the TLS connect died — the DB may already
+exist. Do NOT downgrade to `verify_none`; give Ecto the provider's CA instead (file or
+PEM env var, whichever the provider documents):
 
 ```elixir
-maybe_ssl =
-  cond do
-    System.get_env("ECTO_SSL") in ~w(false 0) -> []
-    # ECTO_SSL_VERIFY in ~w(true 1) -> [ssl: true, ssl_opts: [verify: :verify_peer, cacerts: :public_key.cacerts_get()]]
-    true -> [ssl: true, ssl_opts: [verify: :verify_none]]
+ssl_opts =
+  case System.get_env("DB_CACERTFILE") do
+    path when is_binary(path) and path != "" -> [verify: :verify_peer, cacertfile: path]
+    _empty_or_unset -> [verify: :verify_peer, cacerts: :public_key.cacerts_get()]
   end
+
+maybe_ssl = if System.get_env("ECTO_SSL") in ~w(false 0), do: [], else: [ssl: true, ssl_opts: ssl_opts]
 ```
 
-`verify_none` still encrypts the wire. Prefer `cacertfile` over the system
-bundle when the provider's CA is available. Never leave `# ssl: true`
-commented out — silent no-SSL in prod.
+If the provider ships the CA as a PEM env var instead of a file, decode it once and pass the
+decoded certs to `cacerts:` — still `verify: :verify_peer`. `verify_none` is an explicit,
+temporary opt-out for a known-local dev DB — never the production default, never a silent
+fallback. Never leave `# ssl: true` commented out — silent no-SSL in prod.
 
 ## Plain-HTTP / LAN / VPN topologies
 

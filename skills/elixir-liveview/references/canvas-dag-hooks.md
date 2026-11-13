@@ -73,7 +73,9 @@ keyframe pulses), redraw edges+menus every rAF until transitions end
 
 Where a 3D canvas is driven by a `phx-hook` that owns `this.fullData`,
 the LiveView holds only counters + filter state and pushes data over a
-single channel — see `liveview-data-performance` notes in the SKILL.
+single channel — the hook-owned-state rules in
+`client-dom-vs-morphdom.md` apply, and patch interactions need
+real-browser verification (`e2e-repro-toolkit.md`).
 
 ## Fixture-based testing (no app login)
 

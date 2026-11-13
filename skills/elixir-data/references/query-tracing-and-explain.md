@@ -75,8 +75,8 @@ thousands of rows dominates.
 - **Partitioned table, healthy:** `Aggregate → Append → Index Only Scan` per
   partition node; each child scan narrow (`Index Cond` on `inserted_at`).
 - **Index missing / not useful:** `Seq Scan` per matched partition → the
-  missing-index finding; for partitioned parents, remember partial indexes are
-  NOT auto-propagated and `CONCURRENTLY` is a hard error there.
+  missing-index finding; for partitioned parents, partial indexes DO propagate
+  from the parent, only `CONCURRENTLY` is a hard error there.
 
 ## Idempotency check for index migrations
 

@@ -1,4 +1,4 @@
-# Elixir functional purity patterns — the six foot-guns
+# Elixir functional purity patterns — the seven foot-guns
 
 Symptom: pure-function Elixir modules whose reduce/cond/case logic silently
 matches nothing, dedupes the wrong elements, or crashes on edge inputs — plus
@@ -26,7 +26,7 @@ defmodule MyApp.Domain.Thing do
 end
 ```
 
-## The six foot-guns
+## The seven foot-guns
 
 ### 1. Pin on a tuple doesn't compare tuple elements
 

@@ -4,8 +4,6 @@ Recurring anti-patterns in Phoenix/LiveView codebases and how to spot them
 during an audit. Each pattern: what to grep/look for, why it's a problem,
 and the fix shape.
 
----
-
 ## 1. Dead / duplicate modules
 
 **Grep:** `grep -r "ModuleName" lib/ --include="*.ex"`
@@ -21,8 +19,6 @@ but the old file is never deleted.
 and slots. Nobody imported the dead module.
 
 **Fix:** Delete the dead file, verify with `mix compile --warnings-as-errors`.
-
----
 
 ## 2. XSS via `raw()` on user content
 
@@ -40,8 +36,6 @@ ever changes, it becomes an XSS vector.
 legitimately needed (e.g. `<mark>` highlights from `ts_headline`), sanitize
 explicitly rather than blindly trusting the source.
 
----
-
 ## 3. Pattern-match crash on nil context
 
 **Look for:** `handle_event` clauses that pattern match on
@@ -56,8 +50,6 @@ only caught missing `%Page{}`, not missing context.
 
 **Fix:** Loosen the match to `%{assigns: %{page: %Page{}}}`, then extract
 `context_id` with a `case` that handles nil explicitly.
-
----
 
 ## 4. N+1 queries in templates
 
@@ -83,8 +75,6 @@ inline link inside `render_markdown/2`.
 **Fix:** Same pattern — batch all slugs into one query, build a
 `slug → path` map, then iterate.
 
----
-
 ## 5. Inline JavaScript (AGENTS.md violation)
 
 **Grep:**
@@ -99,8 +89,6 @@ JS handlers. `onclick={"window.location.href='...'"}` violates this.
 `onclick={"window.location.href='#{page_path(page)}'"}` on a div.
 
 **Fix:** Replace with `<.link navigate={path}>` or a `phx-click` handler.
-
----
 
 ## 6. Duplicate utility code
 
@@ -156,8 +144,6 @@ across 11 LiveViews; it was auto-imported. Only `format_due/1` (a
 different function, shorter format) was truly duplicated — defined
 privately in one module and should have lived in a shared helpers module.
 
----
-
 ## 7. Missing pagination
 
 **Look for:** `list_*` context functions that don't accept
@@ -169,9 +155,7 @@ render-time issues.
 
 **Fix:** Add `limit`/`offset` or `Scrivener.Ecto` pagination. Default to
 50 per page. Tiebreak with a stable unique key (see
-`diff-review-idiom-rules.md` PF-06).
-
----
+`diff-review-system-rules.md` PF-06).
 
 ## 8. No caching of expensive renders
 
@@ -186,8 +170,6 @@ resolution + inline-link insertion on every render. The DB already has a
 change; use `body_hash` to skip the cache lookup when the hash matches
 (see LG-02 for the mandatory expiry strategy).
 
----
-
 ## 9. Missing debounce on PubSub-driven refreshes
 
 **Look for:** `handle_info({:step_completed, ...}, socket)` that directly
@@ -198,8 +180,6 @@ PubSub message. Five quick completions = five rapid DB queries.
 
 **Fix:** Debounce with `Process.send_after(self(), :refresh_steps, 200)`.
 Coalesce rapid updates into one DB query.
-
----
 
 ## 10. Unused parameters / dead UI controls
 
@@ -212,8 +192,6 @@ user selects a language and it's silently ignored.
 
 **Fix:** Either pass the opts through to the handler, or hide the UI
 control when it isn't applicable.
-
----
 
 ## Audit reading order for Phoenix apps
 

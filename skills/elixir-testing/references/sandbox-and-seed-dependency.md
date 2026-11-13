@@ -70,7 +70,10 @@ find the `[error] Task #PID` lines, and the nearest `* test ...` line above is
 the test that was running (not necessarily the one that SPAWNED the task —
 tasks accumulate across many tests and die in a batch when one owner stops).
 
-**Fix (suite-wide, test-only):**
+**Fix (suite-wide, test-only).** Disable the app's background-task scheduling
+via its OWN config key — this is project-specific app config, not an ExUnit
+option (this example project calls it `:schedule_async` under `:inference`;
+find the equivalent flag in your app before copying the shape):
 
 ```elixir
 # test/test_helper.exs, after Sandbox.mode(MyApp.Repo, :manual)

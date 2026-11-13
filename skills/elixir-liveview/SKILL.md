@@ -119,7 +119,11 @@ uniquify both fields. Clean up created rows.
 
 ### 1.6 Common HEEx pitfalls
 
-- `Float.round/2` on integers crashes: use `2.0` not `2` as precision.
+- `Float.round/2` needs a float VALUE with an INTEGER precision:
+  `Float.round(2, 2)` raises `FunctionClauseError` (integer value) and
+  `Float.round(x, 2.0)` raises `ArgumentError` (float precision). Convert
+  the value (`x * 1.0`) and keep the precision literal; round money with
+  `Decimal.round/2`.
 - HEEx comments are `<%!-- ... --%>`; never put `--` inside the body.
 - `~p` route sigil is compile-time verified — use plain strings if the
   route doesn't exist yet; `~p` with nil query params crashes — guard.
@@ -260,8 +264,9 @@ own:
 
 ## Testing (LV 1.2+)
 
-- `view.assigns` was removed — assert on `render(view)` HTML or data
-  attributes. Use `live(conn, ~p"/path")` after real login + `recycle()`.
+- `LiveViewTest.View` never exposed `assigns` — there is no `view.assigns`
+  to read; assert on `render(view)` HTML or data attributes. Use
+  `live(conn, ~p"/path")` after real login + `recycle()`.
 - **Selectors are not substrings**: `html =~ ~s(input[name="..."])`
   always FAILS — serialized HTML has no CSS-selector syntax. Use
   `has_element?(view, ~s(selector))`.
@@ -279,19 +284,16 @@ own:
 
 ## VERIFY
 
-Gates before you answer (run from repo root; see the house-rules brief
-for the exact commands):
+Self-contained structural gate before you answer — run from the framework repo
+root. It checks frontmatter, DAGs, exact VERIFY headings, reference files and
+index completeness, reference/category line budgets, and relative links:
 
-1. File count — `find .riel/build/elixir-liveview -name '*.md' | wc -l`
-   → 1 SKILL.md + 5–10 references (11 total).
-2. Scrub — search the build dir for every forbidden project/DB name and
-   Spanish text listed in the house rules → zero matches.
-3. Flowchart — the build SKILL.md contains a `flowchart` code fence.
-4. Frontmatter — the build SKILL.md starts with a valid YAML frontmatter
-   block (name, description, version, author, license, metadata).
-5. Line budgets — SKILL.md 150–350 lines; each reference 60–250 lines.
-6. References index — every file in `references/` is listed in the
-   SKILL.md `## References` index below.
+```bash
+python3 scripts/validate.py
+```
+
+Additionally review the touched category for project-specific names,
+local-only session paths, or non-English content.
 
 ## References
 

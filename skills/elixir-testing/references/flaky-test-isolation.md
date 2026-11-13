@@ -9,10 +9,13 @@ the seed changes.
 
 `async: true` runs tests concurrently against the same database. Any assertion
 on a GLOBAL aggregate (`total == 2` over all rows, full-list equality, exact
-ordering of an unscoped query) is contaminated by every other async test
-inserting rows into the same table/partition/time window. Per-test sandbox
-rollback does not reliably isolate partitions of a range-partitioned table, so
-"cleanup between tests" cannot be relied on.
+ordering of an unscoped query) is contaminated by rows from OUTSIDE the test's
+own transaction: rows committed by zombie tasks on their own pooled
+connections, seed/ad-hoc residue, and concurrent shared-mode writers. The
+per-test sandbox rollback only undoes DML the test's own connection ran — it
+cannot retract rows COMMITTED outside the sandbox — so "cleanup between tests"
+cannot be relied on. Partitioning changes none of this: partition DML
+participates in the same transaction and rolls back like any other row.
 
 ## Triage first: four look-alike failure classes
 

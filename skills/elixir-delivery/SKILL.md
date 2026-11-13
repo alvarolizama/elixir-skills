@@ -4,6 +4,7 @@ description: "Use when committing, gating, or shipping a Phoenix wave."
 version: 1.0.0
 author: Álvaro Lizama
 license: MIT
+platforms: [linux, macos]
 metadata:
   hermes:
     tags: [git, commits, precommit, sobelow, triage, review, deploy, release, docker, readme, screenshots]
@@ -70,7 +71,8 @@ flowchart TD
 
 `mix precommit` expands to: compile → deps.unlock → format → deps.audit →
 `sobelow --exit medium` → test. It dies at sobelow whenever preexisting
-findings exist; you never reach format/test through the alias in that state.
+findings exist: test never runs through the alias in that state, and format
+— which is BEFORE sobelow in the order — may already have run.
 Reference: `precommit-gates.md`.
 
 - **Sobelow disposition (a) — constant false positive:** `Config.CSP` fires
@@ -82,8 +84,10 @@ Reference: `precommit-gates.md`.
   findings" with a stash baseline (`git stash -u` → sobelow → pop → sobelow),
   compare sorted `File:/Function:/Line:` sets; line-number-only diffs = same
   findings. Real new findings block the commit.
-- **Format idempotency:** `mix format`, then `git status --porcelain | wc -l`
-  unchanged from before = tree was already formatted.
+- **Format idempotency:** the check is `mix format --check-formatted`
+  (writes nothing; exit 0 = tree already formatted). To prove `mix format`
+  itself changes nothing, compare file HASHES before/after — a
+  `git status --porcelain` count can stay equal while files are rewritten.
 - **A foreign writer in the tree invalidates the aggregate gates.** `mix
   precommit` runs a global `mix format`, which rewrites whatever another session
   has in flight — its WIP, not yours. Run the pieces individually and format
@@ -128,10 +132,14 @@ tests failing for the same reason count as evidence.
 
 ## 4. structure.sql drift
 
-A wave with migrations must ship `priv/repo/structure.sql` matching ALL of
-them. Stale-dump signature: the `schema_migrations` INSERT block lists fewer
-versions than there are `priv/repo/migrations/*.exs` files, or dropped
-columns still declared. Reference: `structure-sql-drift.md`.
+Territory: **elixir-data** owns the migration-authoring rules (renames,
+backfill-before-drop, duplicate indexes —
+`skills/elixir-data/references/migrations-and-structure-sql.md`); delivery
+owns the ship-time drift check: a wave with migrations must ship
+`priv/repo/structure.sql` matching ALL of them. Stale-dump signature: the
+`schema_migrations` INSERT block lists fewer versions than there are
+`priv/repo/migrations/*.exs` files, or dropped columns still declared.
+Reference: `structure-sql-drift.md`.
 
 - `mix ecto.migrations` shows all `up` on dev (the dump reads the dev DB),
   then `mix ecto.dump`, then grep re-verification.
@@ -141,7 +149,9 @@ columns still declared. Reference: `structure-sql-drift.md`.
 ## 5. Adversarial review gate before committing
 
 Reference: `adversarial-review-gate.md`. A `delegate_task` review pass with
-the diff as the only input — who writes does not self-approve.
+the diff as the only input — who writes does not self-approve. This is the
+delivery-side dispatch gate; the general reviewer protocol it implements
+lives in `skills/elixir-review/references/adversarial-review-protocol.md`.
 
 - Blocking criteria: secrets, debug leftovers, hardcoded credentials,
   migration/structure.sql drift, missing module references.
@@ -194,13 +204,14 @@ PNG immediately. Reference: `readme-and-screenshots.md`.
 
 ## VERIFY
 
-Category gates for this skill's own build — run from the repo root, exact
-commands and patterns in `.riel/briefs/HOUSE.md`:
+Category gates for this skill's own build — self-contained, run from the
+root of the repo that carries `skills/elixir-delivery/`:
 
-1. File count: `SKILL.md` + 5–10 files in `references/`.
-2. Zero brand/project-name/DB-name matches anywhere under this skill.
-3. `grep -c 'flowchart' SKILL.md` → ≥ 1.
-4. Frontmatter present in the first 12 lines of `SKILL.md`.
+```bash
+# Frontmatter, DAG, exact VERIFY headings, reference integrity/lengths,
+# category size, and relative-link resolution across the full framework.
+python3 scripts/validate.py
+```
 
 Per-wave delivery gates (the ones the skill itself enforces):
 
@@ -208,7 +219,7 @@ Per-wave delivery gates (the ones the skill itself enforces):
 # gates, in order — each must pass before the next matters
 mix compile --warnings-as-errors        # exit 0, no output
 mix format                              # then:
-git status --porcelain | wc -l          # unchanged = format idempotent
+mix format --check-formatted            # exit 0 = tree formatted (idempotent)
 mix test > /tmp/mix_test_full.txt 2>&1  # background; index failures with grep
 grep -nE '^  [0-9]+\) test' /tmp/mix_test_full.txt   # every failure dispositioned
 
@@ -234,8 +245,8 @@ release smoke test passes.
 - `references/precommit-gates.md` — mix precommit order, sobelow dispositions, format/compile/test gates, JS-only and non-Elixir waves.
 - `references/partitioned-commit-waves.md` — committing several entangled waves from one dirty tree with a coverage check.
 - `references/test-failure-triage.md` — three-way verdict, flake loop, stash-baseline pitfall, test-DB contamination.
-- `references/structure-sql-drift.md` — stale structure.sql detection, re-dump checklist, pg_dump noise.
-- `references/adversarial-review-gate.md` — pre-commit review dispatch, death protocol, verdict recovery, finding validation, post-push dispositions.
+- `references/structure-sql-drift.md` — stale structure.sql detection, re-dump checklist, pg_dump noise. Migration-authoring rules (renames, backfills) live in the elixir-data skill (`skills/elixir-data/references/migrations-and-structure-sql.md`).
+- `references/adversarial-review-gate.md` — pre-commit review dispatch, death protocol, verdict recovery, finding validation, post-push dispositions. The general reviewer protocol is `skills/elixir-review/references/adversarial-review-protocol.md`.
 - `references/api-e2e-smoke.md` — real-server curl cycle for REST waves, cleanup of e2e rows.
 - `references/git-hygiene-and-hunks.md` — hunk splitting, subagent races, history surgery, excision, worktree cleanup.
 - `references/git-commit-signing.md` — GPG/SSH signing diagnosis, pinentry fix, end-to-end verification.

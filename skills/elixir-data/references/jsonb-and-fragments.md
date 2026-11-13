@@ -3,17 +3,25 @@
 Everything about `meta`-style JSONB columns: what silently fails, what works,
 and how to index it. All verified.
 
-## The `@>` containment trap
+## `@>` containment with a parameter: type the param
 
-Symptom: `fragment("? @> ?::jsonb", p.meta, ^json)` returns `false` through
-Postgrex even when the stored row exactly contains the object; the same query
-with a literal (`'{"role":"sales"}'::jsonb`) returns `true`.
+Symptom: an untyped JSON-string param fails — `fragment("? @> ?::jsonb",
+p.meta, ^json)` returns `false` through Postgrex even when the stored row
+exactly contains the object; the same query with a literal
+(`'{"role":"sales"}'::jsonb`) returns `true`. Mechanism: the untyped param
+arrives as `text`, so containment compares against text, not the stored jsonb.
 
-Mechanism (verified): Postgrex encodes the JSON string param as `text`;
-containment over the casted parameter doesn't match the stored jsonb.
-`@>` with a parameter is a dead end — do not fight it.
+The fix is typing the param — both forms verified (Ecto 3.14 / Postgres 16-18):
 
-## Per-key `->>` filter (the working pattern)
+```elixir
+# typed JSON string — cast the param explicitly:
+where(q, [p], fragment("? @> ?::jsonb", p.meta, type(^json_string, :string)))
+
+# typed map — decode in Elixir; Ecto encodes it as jsonb:
+where(q, [p], fragment("? @> ?", p.meta, ^Jason.decode!(json_string)))
+```
+
+## Per-key `->>` filter (per-key expression indexes)
 
 One `where` per key/value pair → AND semantics, correct pagination, indexable:
 
@@ -29,7 +37,9 @@ defp maybe_filter_props(query, _props), do: query
 
 Notes:
 
-- The KEY as a parameter (`->>?`) works; only the `@>` jsonb VALUE param is broken.
+- The KEY as a parameter (`->>?`) works. The `@>` VALUE param also works once
+  typed (`type(^json, :string)` or a `Jason.decode!/1` map) — only the untyped
+  form is broken.
 - Non-string values (numbers, nested maps) must be `Jason.encode!/1`'d so the
   comparison matches how the store serialized them.
 - For deeply nested filters (`meta.props.role`), address the path directly:

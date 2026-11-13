@@ -5,6 +5,11 @@ masked (cross-workspace leaks, silent constraint failures) ship. Mechanism:
 authorship biases review; the gate is a review pass with the diff as the
 only input — who writes does not self-approve.
 
+> Scope: this is the delivery-side pre-commit dispatch gate. The general
+> reviewer posture it implements (who-self-approves, blast-radius
+> enumeration, read-before-conclude) lives in
+> `skills/elixir-review/references/adversarial-review-protocol.md`.
+
 ## The gate
 
 Before committing, dispatch a review delegation whose only input is the

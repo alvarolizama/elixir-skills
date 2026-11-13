@@ -2,14 +2,17 @@
 
 Symptom-first catalog of the non-obvious Ecto/Postgres query failures. Each
 entry: symptom → mechanism → fix. Verified on Ecto 3.13-3.14 / Postgrex 0.22.
-## JSONB containment `@>` with a parameter silently returns false
-`fragment(\"? @> ?::jsonb\", p.meta, ^json)` returns `false` through Postgrex
-for rows that visually match exactly. Mechanism (verified): Postgrex sends the
-JSON string as a `text` param; `@>` over the casted parameter doesn't match the
-stored jsonb — identical value, literal returns `true`, param returns `false`.
-Dead end — do not fight it.
+## JSONB containment `@>` with a parameter: type it
+An untyped param fails: `fragment(\"? @> ?::jsonb\", p.meta, ^json)` returns
+`false` through Postgrex for rows that visually match exactly — Postgrex sends
+the JSON string as a `text` param and containment doesn't match the stored
+jsonb (identical value: literal returns `true`, untyped param returns `false`).
+Fix — type the param, either form (verified Ecto 3.14 / Postgres 16-18):
+`fragment(\"? @> ?::jsonb\", p.meta, type(^json, :string))` or pass a decoded
+map: `fragment(\"? @> ?\", p.meta, ^Jason.decode!(json))`.
 
-Fix — per-key text comparison, one `where` per key/value pair (AND logic),
+Per-key text comparison remains the option when each hot key needs its own
+partial expression index: one `where` per key/value pair (AND logic),
 pagination-safe, and can hit partial expression indexes:
 
 ```elixir
@@ -23,8 +26,9 @@ datasets — it filters after LIMIT/OFFSET and breaks pagination correctness.
 ## JSONB string keys inside fragments get mangled
 `fragment(\"?->'props' @> ?\", p.meta, ^json)` strips the quotes during macro
 expansion → `meta->props` → column reference → `ERROR 42703 (undefined_column)
-column \"props\" does not exist`. Fix: pass the key as a parameter —
-`fragment(\"?->? @> ?\", p.meta, \"props\", ^json)`.
+column \"props\" does not exist`. Fix: pass the key as a parameter and type
+the value —
+`fragment(\"?->? @> ?::jsonb\", p.meta, \"props\", type(^json, :string))`.
 ## `==` inside a fragment is Elixir, not SQL
 `fragment(\"?->>'key' == ?\", ...)` fails — Postgres equality is `=`. Always
 `fragment(\"?->>'key' = ?\", ...)`.
@@ -70,9 +74,12 @@ mixes consistent types.
 Inside a raw fragment, Ecto renders a list parameter as `ARRAY['a','b']` for
 `IN ?` — invalid PostgreSQL (`syntax error at or near \"ARRAY\"`). Use
 `= ANY(?)` with the param typed as an array: `type(^list, {:array, :string})`.
-## `union_all` with plain variables
-`union_all(^q1, ^q2)` fails with misplaced `^`. Escape hatch — merge two lean
-queries in Elixir: `(Repo.all(a) ++ Repo.all(b)) |> Enum.frequencies() |> Enum.sort_by(fn {_id, d} -> d end, :desc) |> Enum.take(limit)`.
+## `union_all` with interpolated queries: pipe into the macro
+Supported on the pinned stack (Ecto 3.14): `q1 |> union_all(^q2)` compiles and
+renders UNION ALL with the param. What fails is calling it as a two-argument
+function — `union_all(^q1, ^q2)` — "misplaced `^`". Both sides need matching
+projections; when the SELECT shapes differ, merge two lean queries in Elixir:
+`(Repo.all(a) ++ Repo.all(b)) |> Enum.frequencies() |> Enum.sort_by(fn {_id, d} -> d end, :desc) |> Enum.take(limit)`.
 ## Keyword lists must be the last argument
 `Repo.aggregate(from(r in R, ...), :count)` fails. Bind first:
 `q = from(...); Repo.aggregate(q, :count)`.
@@ -148,12 +155,16 @@ with args `w.completed_at, w.id, type(^@completed, {:array, :string}),
 type(^from, :utc_datetime), type(^to, :utc_datetime)`. Verified: cut queries
 per metric from 2 to 1 and works in Ecto Sandbox. A `LEFT JOIN LATERAL` variant
 failed silently (param type inference) — prefer the scalar subquery.
-## Materialized views are invisible inside Ecto Sandbox tests
-`REFRESH MATERIALIZED VIEW` is DDL that runs outside the sandbox transaction —
-tests asserting on rows written by the test see an always-empty MV. If the
-acceptance is "2 queries → 1 query", a correlated scalar subquery achieves it
-without MV lag/refresh machinery. Only consider an MV for genuinely immutable
-data that tests don't assert on.
+## Materialized views go stale inside Ecto Sandbox tests
+Postgres DDL is transactional — a `CREATE`/`REFRESH MATERIALIZED VIEW` run
+through the Repo participates in the sandbox transaction (verified:
+BEGIN / CREATE MV / SELECT / ROLLBACK). Tests see stale MVs for snapshot
+reasons: the MV holds whatever was committed when it was last refreshed
+(migrations or an external process), so rows the test just inserted never
+appear unless the code path refreshes it. If the acceptance is
+"2 queries → 1 query", a correlated scalar subquery achieves it without MV
+lag/refresh machinery and stays correct under the sandbox. Only consider an MV
+for genuinely immutable data that tests don't assert on.
 ## Schema gotchas
 - Virtual fields cannot be `{:array, :atom}`: `(ArgumentError) unknown type
   :atom for field :sources` — declare `{:array, :string}` and match strings.

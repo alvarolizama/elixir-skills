@@ -4,6 +4,7 @@ description: "Use when Ecto data layer bites: JSONB filters, N+1, partitions, FK
 version: 1.0.0
 author: Álvaro Lizama
 license: MIT
+platforms: [linux, macos]
 metadata:
   hermes:
     tags: [elixir, phoenix, ecto, postgres, sql, jsonb, migrations, partitions, foreign-keys, n+1, performance, indexing, query-tracing]
@@ -46,13 +47,15 @@ flowchart TD
 ```
 ---
 ## 1. Ecto Query Pitfalls (the ones that actually bite)
-- **JSONB containment `@>` with a parameter silently returns `false`** even
-  when the row matches. Postgrex sends the JSON string as `text`, and `@>`
-  over the casted param does not match. Verified: literal returns `true`,
-  identical param returns `false`. Dead end — do not fight it. Preferred fix —
-  per-key text comparison: `fragment(\"?->? = ?\", p.meta, ^key, ^value)`
+- **JSONB containment `@>` with a parameter works — type the param.** An
+  untyped JSON-string param arrives as `text` and containment doesn't match;
+  `fragment(\"? @> ?::jsonb\", p.meta, type(^json_string, :string))` returns the
+  correct rows (verified Ecto 3.14 / Postgres 16-18), as does a decoded map:
+  `fragment(\"? @> ?\", p.meta, ^Jason.decode!(json_string))`. Per-key text
+  comparison (`fragment(\"?->? = ?\", p.meta, ^key, ^value)`) remains the choice
+  when each hot key needs its own partial expression index
   (see `jsonb-and-fragments.md`).
-- **String keys inside fragments get mangled** — `fragment(\"?->'props' @> ?\", ...)` strips the quotes → `meta->props` → `ERROR 42703 (undefined_column)`; pass the key as a parameter: `fragment(\"?->? @> ?\", p.meta, \"props\", ^json)`. **`==` inside a fragment is Elixir, not SQL** — Postgres equality is `=`.
+- **String keys inside fragments get mangled** — `fragment("?->'props' @> ?", ...)` strips the quotes → `meta->props` → `ERROR 42703 (undefined_column)`; pass both the key and a typed JSON-string value: `fragment("?->? @> ?::jsonb", p.meta, ^key, type(^json_string, :string))`. **`==` inside a fragment is Elixir, not SQL** — Postgres equality is `=`.
 - **`^\"string\"` args in fragments** error with "misplaced operator". Inline
   safe constant literals or use `type(^value, :string)` for runtime values.
 - **`fragment(^built_string)` is rejected at compile time** (SQL-injection
@@ -67,7 +70,7 @@ flowchart TD
 - **List params inside raw fragments: `= ANY(?)`, never `IN ?`** — Ecto
   renders `ARRAY['a','b']` for `IN ?` → `syntax error at or near \"ARRAY\"`.
   Type the param: `type(^list, {:array, :string})`.
-- **`union_all(^q1, ^q2)` fails with misplaced `^`** — run two lean queries and merge in Elixir (`++` + `Enum.frequencies/1`). **Keyword lists must be the last argument** — bind the query to a variable before `Repo.aggregate(q, :count)`.
+- **`union_all` with an interpolated query IS supported** — it is a query macro: `q1 |> union_all(^q2)` compiles and renders UNION ALL with the param (verified Ecto 3.14). What fails is calling it as a two-argument function, `union_all(^q1, ^q2)` ("misplaced `^`"). Both sides need matching projections; when the SELECT shapes differ, fall back to two lean queries merged in Elixir (`++` + `Enum.frequencies/1`). **Keyword lists must be the last argument** — bind the query to a variable before `Repo.aggregate(q, :count)`.
 - **Nullable JSONB columns need nil guards** — `not is_nil(p.meta) and fragment(...)`.
 - **Conditional filters**: build the base query, then conditionally append —
   `q = if types == [], do: q, else: from([r, s] in q, where: s.type not in ^types)`.
@@ -79,9 +82,14 @@ flowchart TD
 - **OFFSET/LIMIT without a unique tiebreaker → pages overlap** — append
   `asc: w.id` as the last order key on every paginated query; prove with
   same-key fixtures + `MapSet.disjoint?` across pages.
-- **Materialized views are invisible inside Ecto Sandbox tests** (DDL runs
-  outside the sandbox transaction). Prefer a correlated scalar subquery inside
-  `COALESCE(...)` — one query, works in tests.
+- **Materialized views go stale inside Ecto Sandbox tests** — not because DDL
+  dodges the transaction (Postgres DDL is transactional; a CREATE/REFRESH
+  MATERIALIZED VIEW through the Repo participates in the sandbox transaction
+  and rolls back with it). The real cause is snapshot semantics: an MV's
+  contents are a materialized snapshot from its last refresh (by migrations or
+  an external process), so rows the test just inserted never appear unless the
+  code path refreshes it. Prefer a correlated scalar subquery inside
+  `COALESCE(...)` — one query, no refresh machinery, correct under tests.
 - **Schema virtual fields cannot be `{:array, :atom}`** — `(ArgumentError) unknown type :atom`; use `{:array, :string}`. **A custom `select: %{...}` projection can't be preloaded in the same query** — select the struct, then `Repo.preload/3` in a second statement.
 ## 2. Jsonb & Fragments (concrete recipes)
 - **Flat key/value filter (preferred, pagination-safe):** one `where` per pair
@@ -215,7 +223,7 @@ partition and partition pruning is dead weight.
   + `INCLUDE` every SELECTed column, INCLUDING `id` when the query uses
   `count(id)` (missing it silently blocks the index-only scan). Propagates to
   partitions; supersedes the plain key-only index (drop it in the same migration).
-- **`CREATE INDEX ... CONCURRENTLY` on a partitioned parent is a hard error** (`ERROR 0A000 feature_not_supported`, fires in `mix test` too) — plain `CREATE INDEX IF NOT EXISTS` on the parent. **Partial indexes are NOT auto-propagated** — create per partition, or use a non-partial composite on the parent.
+- **`CREATE INDEX ... CONCURRENTLY` on a partitioned parent is a hard error** (`ERROR 0A000 feature_not_supported`, fires in `mix test` too) — plain `CREATE INDEX IF NOT EXISTS` on the parent. **Partial indexes DO propagate** when created on the parent — each partition gets its own child index; same locking tradeoff as any non-concurrent build, so schedule a window for big tables (CONCURRENTLY stays per-partition only).
 - **Verification funnel**: `VACUUM ANALYZE <table>` → `SET enable_seqscan = off;`
   EXPLAIN ANALYZE the exact query shape → expect Index Only Scan +
   `Heap Fetches: 0` + Append over per-partition nodes; if not, check INCLUDE
@@ -254,7 +262,7 @@ Methodology for finding hot spots by reading code (no slow query in hand):
 6. Read hot-path controllers: helpers called twice with the same args,
    lazy-load helpers (`load_from_db`) hitting Postgres per period.
 7. Check migrations for indexes on every GROUP BY / ORDER BY column;
-   partitioned tables need indexes on the parent; partial indexes per partition.
+   partitioned tables need indexes on the parent — partial indexes included, they propagate to every partition (only CONCURRENTLY is parent-forbidden).
 8. Check partition lifecycle — `PARTITION BY RANGE` without a creation cron =
    everything in default (critical).
 9. Bug patterns grep: `assigns[:period || \"today\"]` (atom always truthy),
@@ -302,35 +310,25 @@ mutating commands; deliver the report inline, end with
 
 ---
 ## VERIFY
-Gates that prove this category's work is complete (run from repo root):
+Gates that prove this category's work is complete (run from repo root, against
+the actual `skills/elixir-data/` tree):
 
 ```bash
-# Gate 1 — SKILL.md + references count (must be 6..11)
-find .riel/build/elixir-data -name '*.md' | wc -l        # 10 + 1 = 11
+# Full structural integrity: frontmatter, DAG, exact VERIFY headings,
+# reference count/index/lengths, category size, and relative-link resolution.
+python3 scripts/validate.py
 
-# Gate 2 — zero scrub violations for the banned-name list from HOUSE.md
-# (project/brand names). Run the grep from HOUSE.md verbatim; must print nothing.
-
-# Gate 3 — decision DAG present
-grep -c 'flowchart' .riel/build/elixir-data/SKILL.md     # >= 1
-
-# Gate 4 — frontmatter present
-head -12 .riel/build/elixir-data/SKILL.md                # has name/description/version/author/license/metadata
-
-# Sizes — SKILL.md 150..350 lines, each reference 60..250
-wc -l .riel/build/elixir-data/SKILL.md .riel/build/elixir-data/references/*.md
-
-# English-only scrub (accented Latin-1 chars; author name in frontmatter is
-# the only allowed exception). Run the grep from HOUSE.md; must print nothing.
+# Must find no local build paths or session artifacts in the category docs.
+grep -rnE '[.]riel|[.]hermes|/Users/' skills/elixir-data --include='*.md'
 ```
 ## References
 - `references/ecto-query-pitfalls.md` — fragment/union/group_by/binding traps with error signatures. Load when a query returns wrong rows or crashes.
-- `references/jsonb-and-fragments.md` — `@>` param failure, per-key `->>` filters, expression indexes, `{}` defaults. Load for any JSONB meta filtering.
+- `references/jsonb-and-fragments.md` — typed `@>` param recipes, per-key `->>` filters, expression indexes, `{}` defaults. Load for any JSONB meta filtering.
 - `references/query-tracing-and-explain.md` — fingerprint SQL → Ecto call site; EXPLAIN funnel, `enable_seqscan=off` probe. Load when a slow query needs diagnosis.
 - `references/fk-delete-cost.md` — SET NULL write cost, FK-less audit ids, DB timeout crash, constraint-drop mechanics. Load when a delete times out or a guard never fires.
 - `references/cascade-deletes-and-fks.md` — three-layer cascade, decision table, user-delete modal pattern, discriminated subjects, mixed int/uuid FKs. Load when a delete raises a constraint error or when designing `on_delete`.
 - `references/partition-maintenance.md` — ATTACH/backfill recipe, error-code table, worker skeleton, covering index, verification funnel. Load for partitioned-table rot.
 - `references/n-plus-one-and-preloads.md` — N+1 shapes, batched aggregates, force-preload traps, false positives. Load when rendering N queries per page.
 - `references/performance-audit-funnel.md` — read-only audit methodology, severity rubric, hot-path checklist. Load when asked to audit performance without a slow query.
-- `references/migrations-and-structure-sql.md` — rename/2, RENAME CONSTRAINT rules, jsonb defaults, backfill-before-drop, duplicate indexes. Load before any rename/alter migration.
+- `references/migrations-and-structure-sql.md` — rename/2, RENAME CONSTRAINT rules, jsonb defaults, backfill-before-drop, duplicate indexes. Load before any rename/alter migration. Covers migration/rename rules; ship-time structure.sql drift detection lives in elixir-delivery (`skills/elixir-delivery/references/structure-sql-drift.md`).
 - `references/concurrency-tests-and-guards.md` — sandbox race-test honesty, locks verified by construction, constraint-guard tests. Load when writing concurrency or FK-guard tests.

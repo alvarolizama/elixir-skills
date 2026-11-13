@@ -6,6 +6,11 @@ is a snapshot taken at one moment; migrations applied after the dump (or a
 dump taken mid-wave) leave it stale, and the mismatch only surfaces as a
 blocked commit — or worse, as a fresh clone with the wrong schema.
 
+Territory: how to AUTHOR migrations (renames, `RENAME CONSTRAINT`,
+backfill-before-drop, duplicate indexes) is the elixir-data skill's
+reference (`skills/elixir-data/references/migrations-and-structure-sql.md`);
+this file is the ship-time drift check only.
+
 ## The signature of a stale dump
 
 - The `schema_migrations` INSERT block lists FEWER versions than there are

@@ -123,7 +123,10 @@ Coalesce Postgres queries across N connected LiveViews:
   header.
 - Numbers: compact K/M/B in KPIs with the exact value in a `title`
   tooltip.
-- `Float.round/2` with an integer precision crashes — use `2.0` or
-  `|| 0.0` defaults.
+- `Float.round/2` takes an INTEGER precision and a FLOAT value —
+  `Float.round(2, 2)` raises `FunctionClauseError` (integer value) and
+  `Float.round(x, 2.0)` raises `ArgumentError` (float precision).
+  Convert the value (`x * 1.0`, with `|| 0.0` nil defaults) and keep
+  the precision literal; round money with `Decimal.round/2`.
 - `System.system_time(:minute)` does NOT exist — use
   `div(System.system_time(:second), 60)`.

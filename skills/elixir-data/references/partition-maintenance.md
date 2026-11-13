@@ -140,8 +140,10 @@ DROP INDEX IF EXISTS events_owner_inserted_idx;  -- fully superseded
   parents (`ERROR 0A000 feature_not_supported`), fires in `mix test`
   migrations too. Plain `CREATE INDEX IF NOT EXISTS` on the parent; schedule a
   window for big tables (blocking).
-- Partial indexes (`WHERE status_code >= 400`) are NOT propagated — create
-  them per partition, or use a non-partial composite on the parent instead.
+- Partial indexes (`WHERE status_code >= 400`) created on the parent DO
+  propagate to every partition. The parent constraint is CONCURRENTLY, not
+  propagation — non-concurrent builds lock, so schedule a window for big
+  tables.
 
 ## Verification funnel (must pass all)
 
